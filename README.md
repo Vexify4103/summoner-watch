@@ -149,6 +149,15 @@ HTML pages using the real key images from `fake_deck`. To re-render one with Edg
 msedge --headless=new --hide-scrollbars --window-size=1920,960 --virtual-time-budget=8000 --screenshot=marketing	humbnail.png file:///<path>/marketing/thumbnail.html
 ```
 
+The demo video (`marketing/demo.gif` / `demo.mp4`, German captions) is recorded from the real
+plugin and rendered on a Stream Deck + mockup (needs Edge and ffmpeg):
+
+```
+cargo build --release --bins --examples
+cargo run --release --example demo_frames -- target/demo
+python -I tools/render_demo.py target/demo marketing/demo
+```
+
 ## License
 
 [MIT](LICENSE)
