@@ -1,0 +1,102 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <script src="https://sdpi-components.dev/releases/v4/sdpi-components.js"></script>
+</head>
+<body>
+  <div id="slot-section" style="display:none">
+    <sdpi-item label="Enemy">
+      <sdpi-select setting="slot" default="auto">
+        <option value="auto">Auto (by key position)</option>
+        <option value="1">Enemy 1 (top)</option>
+        <option value="2">Enemy 2 (jungle)</option>
+        <option value="3">Enemy 3 (mid)</option>
+        <option value="4">Enemy 4 (bot)</option>
+        <option value="5">Enemy 5 (support)</option>
+      </sdpi-select>
+    </sdpi-item>
+  </div>
+
+  <div id="rank-section" style="display:none">
+    <sdpi-item label="Shows">
+      <sdpi-select setting="slot" default="auto">
+        <option value="auto">Auto (by column)</option>
+        <option value="1">Soonest timer</option>
+        <option value="2">2nd soonest</option>
+        <option value="3">3rd soonest</option>
+        <option value="4">4th soonest</option>
+        <option value="5">5th soonest</option>
+        <option value="6">6th soonest</option>
+        <option value="7">7th soonest</option>
+        <option value="8">8th soonest</option>
+      </sdpi-select>
+    </sdpi-item>
+  </div>
+
+  <details open>
+    <summary>Timer settings (shared by all keys)</summary>
+    <sdpi-item label="Start early (s)">
+      <sdpi-textfield setting="offset" global default="3" placeholder="3"></sdpi-textfield>
+    </sdpi-item>
+    <sdpi-item label="Insight haste">
+      <sdpi-textfield setting="insightHaste" global default="18" placeholder="18"></sdpi-textfield>
+    </sdpi-item>
+    <sdpi-item label="Lucidity haste">
+      <sdpi-textfield setting="lucidityHaste" global default="10" placeholder="10"></sdpi-textfield>
+    </sdpi-item>
+    <sdpi-item label="Crimson Lucidity haste">
+      <sdpi-textfield setting="crimsonHaste" global default="20" placeholder="20"></sdpi-textfield>
+    </sdpi-item>
+    <sdpi-item label="Quest TP cooldown (s)">
+      <sdpi-textfield setting="questTpCooldown" global default="390" placeholder="390"></sdpi-textfield>
+    </sdpi-item>
+    <sdpi-item label="Spell order">
+      <sdpi-textfield setting="spellOrder" global default="Flash, Teleport, Ignite, Cleanse, Exhaust, Barrier, Heal, Ghost, Smite" placeholder="Flash, Teleport, Ignite, ..."></sdpi-textfield>
+    </sdpi-item>
+    <sdpi-item label="Ignore spells">
+      <sdpi-textfield setting="ignoreSpells" global default="Smite" placeholder="Smite (none = track all)"></sdpi-textfield>
+    </sdpi-item>
+    <sdpi-item label="Volume (0-100)">
+      <sdpi-textfield setting="volume" global default="60" placeholder="60"></sdpi-textfield>
+    </sdpi-item>
+    <sdpi-item label="Custom .wav">
+      <sdpi-textfield setting="soundPath" global placeholder="optional, e.g. C:\sounds\ding.wav"></sdpi-textfield>
+    </sdpi-item>
+  </details>
+
+  <details>
+    <summary>Riot API (optional: auto-detect Cosmic Insight)</summary>
+    <sdpi-item label="API key">
+      <sdpi-password setting="riotApiKey" global placeholder="RGAPI-..."></sdpi-password>
+    </sdpi-item>
+    <sdpi-item label="Server">
+      <sdpi-select setting="platform" global default="euw1">
+        <option value="euw1">EUW</option>
+        <option value="eun1">EUNE</option>
+        <option value="na1">NA</option>
+        <option value="kr">KR</option>
+        <option value="br1">BR</option>
+        <option value="la1">LAN</option>
+        <option value="la2">LAS</option>
+        <option value="tr1">TR</option>
+        <option value="ru">RU</option>
+        <option value="me1">ME</option>
+        <option value="jp1">JP</option>
+        <option value="oc1">OCE</option>
+        <option value="sg2">SEA</option>
+        <option value="tw2">TW</option>
+        <option value="vn2">VN</option>
+      </sdpi-select>
+    </sdpi-item>
+  </details>
+
+  <script>
+    SDPIComponents.streamDeckClient.getConnectionInfo().then(function (info) {
+      var a = info && info.actionInfo ? info.actionInfo.action : "";
+      if (a.endsWith(".enemy")) document.getElementById("slot-section").style.display = "";
+      if (a.endsWith(".dial")) document.getElementById("rank-section").style.display = "";
+    });
+  </script>
+</body>
+</html>
