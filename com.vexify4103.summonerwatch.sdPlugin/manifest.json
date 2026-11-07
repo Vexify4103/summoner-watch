@@ -2,7 +2,7 @@
   "$schema": "https://schemas.elgato.com/streamdeck/plugins/manifest.json",
   "UUID": "com.vexify4103.summonerwatch",
   "Name": "Summoner Watch",
-  "Version": "0.1.0.0",
+  "Version": "0.1.1.0",
   "Author": "Vexify4103",
   "Description": "Enemy summoner spell timers for League of Legends. Press when an enemy uses Flash, see the countdown, hear when it is back.",
   "URL": "https://github.com/Vexify4103/summoner-watch",
@@ -11,9 +11,9 @@
   "CategoryIcon": "imgs/category",
   "CodePath": "bin/summoner-watch.exe",
   "CodePathWin": "bin/summoner-watch.exe",
-  "SDKVersion": 2,
+  "SDKVersion": 3,
   "Software": {
-    "MinimumVersion": "6.5"
+    "MinimumVersion": "6.9"
   },
   "OS": [
     {

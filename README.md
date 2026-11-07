@@ -8,7 +8,7 @@ Champions, spell icons, cooldowns, boots and levels fill in automatically.
 
 - Works on Stream Deck + (keys, dials and touch strip) and on Stream Deck XL / MK.2 (keys only).
 - Native Rust exe: ~1.5 MB, a few MB of RAM, idle while League is closed.
-- Windows only (League's Live Client API and sound playback).
+- Windows only (League's Live Client API and sound playback). Stream Deck app 6.9 or newer.
 
 **Fair play:** Summoner Watch never detects when an enemy uses a spell. Timers start only
 when you press a key. It reads the same data the in-game scoreboard shows, through Riot's
