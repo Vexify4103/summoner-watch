@@ -140,6 +140,15 @@ key images as SVG files to `target/preview`.
 The exe is built as a console-subsystem app on purpose. Stream Deck starts plugins without a
 window, and a GUI-subsystem build was flagged by Kaspersky.
 
+## Store images
+
+`marketing/` holds the Elgato Marketplace thumbnail and gallery images (1920x960). They are
+HTML pages using the real key images from `fake_deck`. To re-render one with Edge:
+
+```
+msedge --headless=new --hide-scrollbars --window-size=1920,960 --virtual-time-budget=8000 --screenshot=marketing	humbnail.png file:///<path>/marketing/thumbnail.html
+```
+
 ## License
 
 [MIT](LICENSE)

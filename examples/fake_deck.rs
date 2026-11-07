@@ -100,7 +100,9 @@ fn main() {
     }
     // Stream Deck XL: enemy key at column 4 (= enemy 5) and a Timer action on a normal key.
     send(&mut ws, json!({ "event": "willAppear", "action": "com.vexify4103.summonerwatch.enemy", "device": "xl", "context": "xl_enemy5", "payload": { "settings": {}, "controller": "Keypad", "coordinates": { "column": 4, "row": 0 } } }));
-    send(&mut ws, json!({ "event": "willAppear", "action": "com.vexify4103.summonerwatch.dial", "device": "xl", "context": "xl_timer1", "payload": { "settings": {}, "controller": "Keypad", "coordinates": { "column": 0, "row": 1 } } }));
+    for t in 0..4 {
+        send(&mut ws, json!({ "event": "willAppear", "action": "com.vexify4103.summonerwatch.dial", "device": "xl", "context": format!("xl_timer{}", t + 1), "payload": { "settings": {}, "controller": "Keypad", "coordinates": { "column": t, "row": 1 } } }));
+    }
     pump(&mut ws, 6.0, &mut log); // worker polls + Data Dragon download
 
     // Wukong (Lucidity boots): tap = Flash. Lee Sin: hold = Smite. Kai'Sa: toggle Insight then Flash.

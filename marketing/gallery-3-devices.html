@@ -1,0 +1,62 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><link rel="stylesheet" href="style.css">
+<style>
+  .xl { position: absolute; left: 100px; top: 150px; width: 940px; }
+  .xl .keys { grid-template-columns: repeat(8, 1fr); gap: 14px; }
+  .xl .key { aspect-ratio: 1; border-radius: 12px; }
+  .xl .label { margin-top: 26px; text-align: center; font-size: 24px; color: var(--muted); }
+  .profile { display: flex; align-items: center; justify-content: center; flex-direction: column; color: #8b949e; font-weight: 700; font-size: 15px; }
+  .profile span { font-size: 34px; line-height: 1; margin-bottom: 4px; }
+  .right { position: absolute; left: 1120px; top: 120px; width: 700px; }
+  .right h2 { font-size: 48px; white-space: nowrap; }
+  .steps { margin-top: 40px; list-style: none; counter-reset: s; }
+  .steps li { counter-increment: s; position: relative; padding-left: 78px; margin-bottom: 34px; font-size: 26px; line-height: 1.4; color: var(--muted); }
+  .steps li b { color: var(--text); }
+  .steps li::before {
+    content: counter(s); position: absolute; left: 0; top: -2px; width: 52px; height: 52px; border-radius: 50%;
+    background: var(--gold); color: #1a1230; font-weight: 800; font-size: 28px; display: flex; align-items: center; justify-content: center;
+  }
+  .devices { margin-top: 20px; font-size: 22px; line-height: 1.7; color: var(--muted); border-top: 1px solid rgba(255,255,255,0.12); padding-top: 26px; }
+  .devices b { color: var(--text); }
+</style></head>
+<body>
+  <div class="xl">
+    <div class="device">
+      <div class="keys">
+        <div class="key"><img src="keys/k0.svg"></div>
+        <div class="key"><img src="keys/k1.svg"></div>
+        <div class="key"><img src="keys/k2.svg"></div>
+        <div class="key"><img src="keys/k3.svg"></div>
+        <div class="key"><img src="keys/xl_enemy5.svg"></div>
+        <div class="key"><img src="keys/insight.svg"></div>
+        <div class="key"><img src="keys/reset.svg"></div>
+        <div class="key profile"><span>⌂</span>MAIN</div>
+        <div class="key"><img src="keys/xl_timer1.svg"></div>
+        <div class="key"><img src="keys/xl_timer2.svg"></div>
+        <div class="key"><img src="keys/xl_timer3.svg"></div>
+        <div class="key"><img src="keys/xl_timer4.svg"></div>
+        <div class="key blank"></div><div class="key blank"></div><div class="key blank"></div><div class="key blank"></div>
+        <div class="key blank"></div><div class="key blank"></div><div class="key blank"></div><div class="key blank"></div>
+        <div class="key blank"></div><div class="key blank"></div><div class="key blank"></div><div class="key blank"></div>
+        <div class="key blank"></div><div class="key blank"></div><div class="key blank"></div><div class="key blank"></div>
+        <div class="key blank"></div><div class="key blank"></div><div class="key blank"></div><div class="key blank"></div>
+      </div>
+    </div>
+    <div class="label">Stream Deck XL: enemies on top, soonest timers below</div>
+  </div>
+
+  <div class="right">
+    <h2>Works on every <span class="gold">Stream Deck</span></h2>
+    <ul class="steps">
+      <li><b>Create a "League" profile</b> and link it to League of Legends. It shows up only in game.</li>
+      <li><b>Drag in five Enemy keys</b>, plus Insight, Undo and Timer keys or dials.</li>
+      <li><b>Start a game.</b> Champions and spells fill in on their own.</li>
+    </ul>
+    <div class="devices">
+      <b>Stream Deck +</b>: dials and touch strip show the soonest timers<br>
+      <b>XL, MK.2, Mini</b>: Timer keys, tap −5 s, hold to cancel<br>
+      <b>Fair play</b>: timers start only when you press
+    </div>
+  </div>
+  <div class="footer">Summoner Watch isn't endorsed by Riot Games. League of Legends is a trademark of Riot Games, Inc.</div>
+</body></html>

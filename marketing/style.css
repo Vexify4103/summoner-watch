@@ -1,0 +1,72 @@
+/* Shared look for the Marketplace gallery images (1920x960). */
+:root {
+  --bg1: #070b1f;
+  --bg2: #1b1147;
+  --gold: #e8b33a;
+  --gold-soft: #f3d27a;
+  --blue: #49b8ff;
+  --text: #eef1ff;
+  --muted: #a9b0d6;
+  --device: #15171c;
+  --device-edge: #2a2d35;
+  --key-off: #0d1117;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { width: 1920px; height: 960px; overflow: hidden; }
+body {
+  font-family: "Segoe UI", system-ui, sans-serif;
+  color: var(--text);
+  background:
+    radial-gradient(900px 600px at 78% 45%, rgba(73, 184, 255, 0.18), transparent 70%),
+    radial-gradient(800px 700px at 15% 20%, rgba(140, 80, 255, 0.22), transparent 70%),
+    linear-gradient(135deg, var(--bg1), var(--bg2));
+  position: relative;
+}
+h1 { font-size: 92px; font-weight: 800; letter-spacing: -1px; line-height: 1; }
+h2 { font-size: 64px; font-weight: 800; letter-spacing: -0.5px; }
+.gold { color: var(--gold); }
+.tag { font-size: 34px; color: var(--muted); font-weight: 500; }
+.footer {
+  position: absolute; left: 0; right: 0; bottom: 22px;
+  text-align: center; font-size: 15px; color: rgba(169, 176, 214, 0.55);
+}
+
+/* Stream Deck hardware mockups */
+.device {
+  background: linear-gradient(180deg, #1c1f26, var(--device));
+  border: 2px solid var(--device-edge);
+  border-radius: 44px;
+  box-shadow: 0 40px 90px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  padding: 34px;
+}
+.keys { display: grid; gap: 18px; }
+.key {
+  border-radius: 16px; overflow: hidden; background: var(--key-off);
+  box-shadow: inset 0 0 0 2px #000, 0 2px 0 #2c2f37;
+}
+.key img { width: 100%; height: 100%; display: block; }
+.key.blank { background: #0a0c10; }
+
+/* Stream Deck + touch strip */
+.strip {
+  margin-top: 24px; display: grid; grid-template-columns: repeat(4, 1fr);
+  border-radius: 10px; overflow: hidden; background: #000; box-shadow: inset 0 0 0 2px #000;
+}
+.seg { position: relative; aspect-ratio: 2 / 1; border-left: 1px solid #222; }
+.seg:first-child { border-left: 0; }
+.seg .in { position: absolute; left: 0; top: 0; width: 200px; height: 100px; transform-origin: 0 0; }
+.seg .champ { position: absolute; left: 6px; top: 8px; width: 56px; height: 56px; border-radius: 6px; }
+.seg .spell { position: absolute; left: 66px; top: 36px; width: 28px; height: 28px; border-radius: 4px; }
+.seg .name { position: absolute; left: 98px; top: 8px; width: 98px; font-size: 15px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.seg .time { position: absolute; left: 98px; top: 30px; font-size: 28px; font-weight: 700; }
+.seg .bar { position: absolute; left: 6px; top: 76px; width: 188px; height: 14px; background: #333; border: 1px solid #555; border-radius: 3px; overflow: hidden; }
+.seg .bar i { display: block; height: 100%; background: var(--gold); }
+.dials { margin-top: 30px; display: grid; grid-template-columns: repeat(4, 1fr); justify-items: center; }
+.dial {
+  width: 96px; height: 96px; border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #4a4e57, #1d1f24 70%);
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.6), inset 0 0 0 3px #0f1013;
+}
+
+.callout { font-size: 22px; color: var(--muted); line-height: 1.4; }
+.callout b { color: var(--text); }

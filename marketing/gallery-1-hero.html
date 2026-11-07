@@ -1,0 +1,44 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><link rel="stylesheet" href="style.css">
+<style>
+  .left { position: absolute; left: 110px; top: 110px; width: 820px; }
+  .left img.logo { width: 250px; height: 250px; border-radius: 40px; box-shadow: 0 20px 60px rgba(73, 184, 255, 0.3); }
+  .left h1 { margin-top: 36px; }
+  .left .tag { margin-top: 18px; }
+  .points { margin-top: 40px; list-style: none; font-size: 28px; line-height: 1.8; }
+  .points li::before { content: "◆"; color: var(--gold); margin-right: 16px; font-size: 22px; }
+  .right { position: absolute; right: 120px; top: 70px; width: 720px; }
+  .right .keys { grid-template-columns: repeat(4, 1fr); }
+  .right .key { aspect-ratio: 1; }
+</style></head>
+<body>
+  <div class="left">
+    <img class="logo" src="../assets/icon.png">
+    <h1>Summoner <span class="gold">Watch</span></h1>
+    <div class="tag">Enemy summoner spell timers for League of Legends</div>
+    <ul class="points">
+      <li>One press when Flash is burned</li>
+      <li>Countdown with exact cooldowns, boots &amp; runes</li>
+      <li>Sound and green key when it's back</li>
+    </ul>
+  </div>
+
+  <div class="right">
+    <div class="device">
+      <div class="keys">
+        <div class="key"><img src="keys/k0.svg"></div>
+        <div class="key"><img src="keys/k1.svg"></div>
+        <div class="key"><img src="keys/k2.svg"></div>
+        <div class="key"><img src="keys/k3.svg"></div>
+        <div class="key"><img src="keys/k4.svg"></div>
+        <div class="key"><img src="keys/insight.svg"></div>
+        <div class="key"><img src="keys/reset.svg"></div>
+        <div class="key blank"></div>
+      </div>
+      <div class="strip" id="strip"></div>
+      <div class="dials"><div class="dial"></div><div class="dial"></div><div class="dial"></div><div class="dial"></div></div>
+    </div>
+  </div>
+  <div class="footer">Summoner Watch isn't endorsed by Riot Games. League of Legends is a trademark of Riot Games, Inc.</div>
+  <script src="strip.js"></script>
+</body></html>

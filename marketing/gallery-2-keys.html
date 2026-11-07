@@ -1,0 +1,41 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><link rel="stylesheet" href="style.css">
+<style>
+  .head { position: absolute; top: 80px; left: 0; right: 0; text-align: center; }
+  .head .tag { margin-top: 16px; }
+  .row { position: absolute; top: 300px; left: 110px; right: 110px; display: grid; grid-template-columns: repeat(4, 1fr); gap: 60px; }
+  .card { text-align: center; }
+  .card .key { width: 300px; height: 300px; margin: 0 auto; border-radius: 30px; box-shadow: 0 30px 70px rgba(0, 0, 0, 0.55), inset 0 0 0 3px #000; }
+  .card h3 { margin-top: 34px; font-size: 30px; font-weight: 700; color: var(--gold-soft); }
+  .card p { margin-top: 12px; font-size: 22px; line-height: 1.45; color: var(--muted); }
+  .card p b { color: var(--text); }
+</style></head>
+<body>
+  <div class="head">
+    <h2>Tap. Watch. <span class="gold">Punish.</span></h2>
+    <div class="tag">Tap = most important spell &nbsp;·&nbsp; Hold = the other one &nbsp;·&nbsp; Flash is always a tap</div>
+  </div>
+  <div class="row">
+    <div class="card">
+      <div class="key"><img src="keys/k0.svg"></div>
+      <h3>On cooldown</h3>
+      <p>Live countdown per spell.<br><b>B</b> = Lucidity boots, small <b>TP</b> = top lane quest Teleport (double-tap)</p>
+    </div>
+    <div class="card">
+      <div class="key"><img src="keys/k2.svg"></div>
+      <h3>Back up</h3>
+      <p>Key turns <b>green</b> and a sound plays.<br><b>CI</b> = Cosmic Insight, toggle or auto-detect</p>
+    </div>
+    <div class="card">
+      <div class="key"><img src="keys/k3.svg"></div>
+      <h3>Exact cooldowns</h3>
+      <p><b>B+</b> = Crimson Lucidity.<br>Boots, runes and levels are applied automatically</p>
+    </div>
+    <div class="card">
+      <div class="key"><img src="keys/k1.svg"></div>
+      <h3>No clutter</h3>
+      <p>Smite is ignored, so the jungler's key shows only the spell that matters</p>
+    </div>
+  </div>
+  <div class="footer">Summoner Watch isn't endorsed by Riot Games. League of Legends is a trademark of Riot Games, Inc.</div>
+</body></html>
