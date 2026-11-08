@@ -101,8 +101,9 @@ Haste values are settings, because Riot changes them in balance patches.
 | Quest TP cooldown (s) | 390 | Base cooldown of the top lane quest Teleport, haste applies |
 | Spell order | Flash, Teleport, Ignite, Cleanse, Exhaust, Barrier, Heal, Ghost, Smite | Importance, most important first. Separate with `,` or `>`. `tp` works as Teleport. Unlisted spells rank last |
 | Ignore spells | Smite | Never tracked. `none` = track everything |
-| Volume | 60 | Built-in sound, 0 = silent |
-| Custom .wav | empty | Path to your own sound file |
+| Sound | Chime | Chime, Ding, Rise, Ping, Double beep, Alarm (loudest), My sound file, or Off |
+| Sound file | empty | Your own `.wav`, `.mp3`, `.ogg` or `.flac`, used when Sound is "My sound file". Raised to full level, first 8 seconds only |
+| Volume | 60 | Slider, 0 = silent. **Test sound** plays the current choice |
 | Riot API key / Server | empty | Optional, see below |
 
 ## Optional: auto-detect Cosmic Insight

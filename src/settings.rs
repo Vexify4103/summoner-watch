@@ -12,9 +12,11 @@ pub struct Settings {
     pub crimson_haste: f64,
     /// Base cooldown of the top lane quest Teleport.
     pub quest_tp_cd: f64,
-    /// 0-100, volume of the built-in sound.
+    /// 0-100, volume of the sound.
     pub volume: f64,
-    /// Optional custom .wav file. Overrides the built-in sound.
+    /// Built-in sound name, "custom" for the imported file, or "off".
+    pub sound: String,
+    /// Imported sound file (.wav, .mp3, .ogg, .flac), used when sound is "custom".
     pub sound_path: String,
     /// Spell importance, most important first (lowercase). Decides which spell is the short press.
     pub spell_order: Vec<String>,
@@ -49,6 +51,7 @@ impl Default for Settings {
             crimson_haste: 20.0,
             quest_tp_cd: 390.0,
             volume: 60.0,
+            sound: "chime".into(),
             sound_path: String::new(),
             spell_order: parse_order(DEFAULT_SPELL_ORDER),
             ignore_spells: parse_order(DEFAULT_IGNORE),
@@ -81,7 +84,14 @@ impl Settings {
             .chars()
             .filter(|c| c.is_ascii_alphanumeric())
             .collect();
+        let sound_path = text(v, "soundPath", "");
+        // Before v0.1.3 a sound path alone meant "use this file".
+        let old_default = if sound_path.is_empty() { "chime" } else { "custom" };
+        let sound = text(v, "sound", old_default).to_lowercase();
+        let known = sound == "custom" || sound == "off" || crate::sound::PRESETS.iter().any(|(id, _)| *id == sound);
         Settings {
+            sound: if known { sound } else { d.sound.clone() },
+            sound_path,
             api_key: text(v, "riotApiKey", ""),
             platform: if platform.is_empty() { d.platform } else { platform },
             offset: num(v, "offset", d.offset).clamp(0.0, 30.0),
@@ -90,7 +100,6 @@ impl Settings {
             crimson_haste: num(v, "crimsonHaste", d.crimson_haste).clamp(0.0, 200.0),
             quest_tp_cd: num(v, "questTpCooldown", d.quest_tp_cd).clamp(1.0, 1200.0),
             volume: num(v, "volume", d.volume).clamp(0.0, 100.0),
-            sound_path: text(v, "soundPath", ""),
             spell_order: parse_order(&text(v, "spellOrder", DEFAULT_SPELL_ORDER)),
             // Empty field = default; "none" = track everything.
             ignore_spells: parse_order(&text(v, "ignoreSpells", DEFAULT_IGNORE)).into_iter().filter(|p| p != "none").collect(),
@@ -132,6 +141,16 @@ mod tests {
         assert!(!s.is_ignored("SummonerFlash", "Flash"));
         let all = Settings::from_json(&json!({ "ignoreSpells": "none" }));
         assert!(!all.is_ignored("SummonerSmite", "Smite"));
+    }
+
+    #[test]
+    fn sound_choice() {
+        assert_eq!(Settings::from_json(&json!({})).sound, "chime");
+        assert_eq!(Settings::from_json(&json!({ "sound": "alarm" })).sound, "alarm");
+        assert_eq!(Settings::from_json(&json!({ "sound": "nonsense" })).sound, "chime");
+        // Old setups that only set a file path keep using the file.
+        assert_eq!(Settings::from_json(&json!({ "soundPath": "C:\\a.wav" })).sound, "custom");
+        assert_eq!(Settings::from_json(&json!({ "soundPath": "C:\\a.wav", "sound": "ding" })).sound, "ding");
     }
 
     #[test]

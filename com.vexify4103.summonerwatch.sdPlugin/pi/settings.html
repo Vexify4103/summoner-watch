@@ -57,12 +57,33 @@
     <sdpi-item label="Ignore spells">
       <sdpi-textfield setting="ignoreSpells" global default="Smite" placeholder="Smite (none = track all)"></sdpi-textfield>
     </sdpi-item>
-    <sdpi-item label="Volume (0-100)">
-      <sdpi-textfield setting="volume" global default="60" placeholder="60"></sdpi-textfield>
+  </details>
+
+  <details open>
+    <summary>Sound (when a spell is back)</summary>
+    <sdpi-item label="Sound">
+      <sdpi-select setting="sound" global default="chime">
+        <option value="chime">Chime</option>
+        <option value="ding">Ding</option>
+        <option value="rise">Rise</option>
+        <option value="ping">Ping</option>
+        <option value="beep">Double beep</option>
+        <option value="alarm">Alarm (loudest)</option>
+        <option value="custom">My sound file</option>
+        <option value="off">Off</option>
+      </sdpi-select>
     </sdpi-item>
-    <sdpi-item label="Custom .wav">
-      <sdpi-textfield setting="soundPath" global placeholder="optional, e.g. C:\sounds\ding.wav"></sdpi-textfield>
+    <sdpi-item label="Sound file">
+      <sdpi-file setting="soundPath" global accept=".wav,.mp3,.ogg,.flac" label="Choose..."></sdpi-file>
     </sdpi-item>
+    <sdpi-item label="Volume">
+      <sdpi-range setting="volume" global default="60" min="0" max="100" step="5" showlabels></sdpi-range>
+    </sdpi-item>
+    <sdpi-item label="">
+      <sdpi-button id="test-sound">Test sound</sdpi-button>
+    </sdpi-item>
+    <p class="hint">Sound file: .wav, .mp3, .ogg or .flac, used when Sound is "My sound file".
+      Quiet files are raised to full level. Only the first 8 seconds play.</p>
   </details>
 
   <details>
@@ -91,7 +112,17 @@
     </sdpi-item>
   </details>
 
+  <style>
+    .hint { color: #969696; font-size: 9pt; margin: 2px 12px 8px 12px; line-height: 1.4; }
+  </style>
   <script>
+    // Plays the sound with the saved settings. The short wait lets a volume
+    // change that is still being saved arrive first.
+    document.getElementById("test-sound").addEventListener("click", function () {
+      setTimeout(function () {
+        SDPIComponents.streamDeckClient.send("sendToPlugin", { event: "testSound" });
+      }, 300);
+    });
     SDPIComponents.streamDeckClient.getConnectionInfo().then(function (info) {
       var a = info && info.actionInfo ? info.actionInfo.action : "";
       if (a.endsWith(".enemy")) document.getElementById("slot-section").style.display = "";

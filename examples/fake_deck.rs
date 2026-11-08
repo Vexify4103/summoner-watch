@@ -87,7 +87,9 @@ fn main() {
     let send = |ws: &mut tungstenite::WebSocket<std::net::TcpStream>, v: Value| ws.send(Message::Text(v.to_string().into())).unwrap();
 
     pump(&mut ws, 0.5, &mut log);
-    send(&mut ws, json!({ "event": "didReceiveGlobalSettings", "payload": { "settings": { "offset": "3", "volume": "40" } } }));
+    send(&mut ws, json!({ "event": "didReceiveGlobalSettings", "payload": { "settings": { "offset": "3", "volume": 40, "sound": "ding" } } }));
+    // "Test sound" button in the settings panel.
+    send(&mut ws, json!({ "event": "sendToPlugin", "context": "pi", "action": "com.vexify4103.summonerwatch.enemy", "payload": { "event": "testSound" } }));
     send(&mut ws, json!({ "event": "applicationDidLaunch", "payload": { "application": "League of Legends.exe" } }));
     let keys = [("k0", 0, 0), ("k1", 1, 0), ("k2", 2, 0), ("k3", 3, 0), ("k4", 0, 1)];
     for (ctx, col, row) in keys {

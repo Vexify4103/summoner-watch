@@ -236,6 +236,10 @@ impl App {
             "didReceiveGlobalSettings" => {
                 *self.settings.lock().unwrap() = Settings::from_json(&p["settings"]);
             }
+            // "Test sound" button in the settings panel.
+            "sendToPlugin" if p["event"].as_str() == Some("testSound") => {
+                sound::play(&self.settings.lock().unwrap());
+            }
             "applicationDidLaunch" => self.league_running.store(true, Ordering::Relaxed),
             "applicationDidTerminate" => self.league_running.store(false, Ordering::Relaxed),
             "keyDown" => {
