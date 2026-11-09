@@ -1,6 +1,6 @@
 [package]
 name = "summoner-watch"
-version = "0.1.3"
+version = "0.1.4"
 edition = "2021"
 description = "Stream Deck plugin: manual enemy summoner spell timers for League of Legends"
 

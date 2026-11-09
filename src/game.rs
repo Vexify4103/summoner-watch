@@ -105,7 +105,41 @@ struct SpellData {
 struct DDragon {
     version: String,
     spells: HashMap<String, SpellData>,
+    /// Champion (id, English name), e.g. ("MonkeyKing", "Wukong"). Empty if the list failed to load.
+    champions: Vec<(String, String)>,
     icons: HashMap<String, String>,
+    /// Icons that failed to download, with the time of the next try.
+    failed: HashMap<String, Instant>,
+}
+
+/// How long to wait before downloading a failed icon again.
+const ICON_RETRY: Duration = Duration::from_secs(30);
+
+/// Lowercase letters and digits only: "Kai'Sa" -> "kaisa".
+fn norm(s: &str) -> String {
+    s.chars().filter(|c| c.is_ascii_alphanumeric()).map(|c| c.to_ascii_lowercase()).collect()
+}
+
+/// Finds the Data Dragon champion id for a champion from the game.
+/// `raw` comes from rawChampionName and is usually, but not always, the same
+/// as the Data Dragon id (case, or extra text after the name, can differ).
+fn champ_key(champions: &[(String, String)], raw: &str, display: &str) -> String {
+    if champions.is_empty() || champions.iter().any(|(id, _)| id == raw) {
+        return raw.to_string();
+    }
+    let (raw_n, display_n) = (norm(raw), norm(display));
+    let by = |f: &dyn Fn(&str, &str) -> bool| champions.iter().find(|(id, name)| f(&norm(id), &norm(name))).map(|(id, _)| id.clone());
+    by(&|id, _| !raw_n.is_empty() && id == raw_n)
+        .or_else(|| by(&|id, name| !display_n.is_empty() && (id == display_n || name == display_n)))
+        // e.g. "SeraphineSkin" -> "Seraphine": the longest id the raw name starts with.
+        .or_else(|| {
+            champions
+                .iter()
+                .filter(|(id, _)| !raw_n.is_empty() && raw_n.starts_with(&norm(id)))
+                .max_by_key(|(id, _)| id.len())
+                .map(|(id, _)| id.clone())
+        })
+        .unwrap_or_else(|| raw.to_string())
 }
 
 fn fallback_cooldown(id: &str) -> f64 {
@@ -167,18 +201,48 @@ impl DDragon {
                 },
             );
         }
-        Ok(DDragon { version, spells, icons: HashMap::new() })
+        // Without the champion list, champion ids from the game are used as they are.
+        let champions = get_json(web, &format!("{DDRAGON}/cdn/{version}/data/en_US/champion.json"), None)
+            .ok()
+            .and_then(|c| {
+                c["data"].as_object().map(|m| {
+                    m.iter().map(|(id, v)| (id.clone(), v["name"].as_str().unwrap_or(id).to_string())).collect()
+                })
+            })
+            .unwrap_or_default();
+        Ok(DDragon { version, spells, champions, icons: HashMap::new(), failed: HashMap::new() })
     }
 
-    /// `path` like "champion/Ahri.png". Cached; failures are cached as empty.
+    /// `path` like "champion/Ahri.png". Cached. A failed download returns
+    /// empty and is tried again after ICON_RETRY, so one network hiccup does
+    /// not hide an icon until Stream Deck restarts.
     fn icon(&mut self, web: &ureq::Agent, path: &str) -> String {
         if let Some(i) = self.icons.get(path) {
             return i.clone();
         }
+        if self.failed.get(path).is_some_and(|t| Instant::now() < *t) {
+            return String::new();
+        }
         let url = format!("{DDRAGON}/cdn/{}/img/{path}", self.version);
-        let icon = get_png(web, &url).unwrap_or_default();
-        self.icons.insert(path.to_string(), icon.clone());
-        icon
+        match get_png(web, &url) {
+            Ok(icon) => {
+                self.failed.remove(path);
+                self.icons.insert(path.to_string(), icon.clone());
+                icon
+            }
+            Err(_) => {
+                self.failed.insert(path.to_string(), Instant::now() + ICON_RETRY);
+                String::new()
+            }
+        }
+    }
+
+    fn champ_icon(&mut self, web: &ureq::Agent, raw: &str, display: &str) -> String {
+        let key = champ_key(&self.champions, raw, display);
+        if key.is_empty() {
+            return String::new();
+        }
+        self.icon(web, &format!("champion/{key}.png"))
     }
 }
 
@@ -403,7 +467,9 @@ pub fn spawn(settings: Arc<Mutex<Settings>>, league_running: Arc<AtomicBool>, tx
                                 })
                             },
                             champ_icon: match dd.as_mut() {
-                                Some(d) if !r.champ_id.is_empty() => d.icon(&web, &format!("champion/{}.png", r.champ_id)),
+                                Some(d) if !r.champ_id.is_empty() || !r.champ_name.is_empty() => {
+                                    d.champ_icon(&web, &r.champ_id, &r.champ_name)
+                                }
                                 _ => String::new(),
                             },
                             champ: r.champ_name.clone(),
@@ -468,6 +534,21 @@ mod tests {
         assert_eq!(enemies[1].boots, Boots::None);
         assert_eq!(enemies[2].boots, Boots::Crimson);
         assert_eq!(enemies[0].position, "");
+    }
+
+    #[test]
+    fn champion_ids_match_data_dragon() {
+        let list: Vec<(String, String)> = [("Seraphine", "Seraphine"), ("MonkeyKing", "Wukong"), ("Kaisa", "Kai'Sa"), ("Nunu", "Nunu & Willump"), ("Fiddlesticks", "Fiddlesticks"), ("Renata", "Renata Glasc")]
+            .iter()
+            .map(|(a, b)| (a.to_string(), b.to_string()))
+            .collect();
+        assert_eq!(champ_key(&list, "MonkeyKing", "Wukong"), "MonkeyKing");
+        assert_eq!(champ_key(&list, "FiddleSticks", "Fiddlesticks"), "Fiddlesticks"); // case differs
+        assert_eq!(champ_key(&list, "SeraphineSkin", "Seraphine"), "Seraphine"); // extra text
+        assert_eq!(champ_key(&list, "", "Seraphine"), "Seraphine"); // raw name missing
+        assert_eq!(champ_key(&list, "Something", "Kai'Sa"), "Kaisa"); // by display name
+        assert_eq!(champ_key(&list, "Renata", "Renata Glasc"), "Renata");
+        assert_eq!(champ_key(&[], "Seraphine", "Seraphine"), "Seraphine"); // no list: as is
     }
 
     #[test]
