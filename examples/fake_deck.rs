@@ -107,7 +107,7 @@ fn main() {
     }
     pump(&mut ws, 6.0, &mut log); // worker polls + Data Dragon download
 
-    // Wukong (Lucidity boots): tap = Flash. Lee Sin: hold = Smite. Kai'Sa: toggle Insight then Flash.
+    // Wukong (Lucidity boots): tap = Flash. Lee Sin: Smite is ignored, so any press = Flash. Kai'Sa: toggle Insight then Flash.
     let press = |ws: &mut tungstenite::WebSocket<std::net::TcpStream>, ctx: &str, hold_ms: u64| {
         ws.send(Message::Text(json!({ "event": "keyDown", "context": ctx }).to_string().into())).unwrap();
         std::thread::sleep(Duration::from_millis(hold_ms));
@@ -120,10 +120,15 @@ fn main() {
     press(&mut ws, "k2", 50);
     press(&mut ws, "k4", 50);
     pump(&mut ws, 1.5, &mut log);
-    // Double-tap Wukong (top, no TP) = quest Teleport.
-    press(&mut ws, "k0", 40);
+    // Double-tap Jinx = her other spell (Heal).
+    press(&mut ws, "k3", 40);
     std::thread::sleep(Duration::from_millis(80));
-    press(&mut ws, "k0", 40);
+    press(&mut ws, "k3", 40);
+    // Hold Wukong (top, no TP) = quest Teleport. Keep reading during the hold,
+    // like Stream Deck does, so the plugin is not blocked sending images.
+    send(&mut ws, json!({ "event": "keyDown", "context": "k0" }));
+    pump(&mut ws, 0.6, &mut log);
+    send(&mut ws, json!({ "event": "keyUp", "context": "k0" }));
     pump(&mut ws, 1.0, &mut log);
     // Jinx's timer (k4 is the 5th key = enemy 5? no: row 1 col 0 = index 4 = Nunu). Shrink the soonest one to test expiry + sound.
     send(&mut ws, json!({ "event": "dialRotate", "context": "dial0", "payload": { "ticks": -100 } }));

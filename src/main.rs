@@ -18,7 +18,7 @@ use std::time::{Duration, Instant};
 use tungstenite::Message;
 
 const LONG_PRESS: Duration = Duration::from_millis(450);
-/// Second tap within this time = quest Teleport (top laner key only).
+/// Second tap within this time = the other spell (enemy keys).
 const DOUBLE_TAP: Duration = Duration::from_millis(300);
 /// How long a spell that just came back stays highlighted.
 const FRESH_FOR: Duration = Duration::from_secs(20);
@@ -39,7 +39,7 @@ struct Instance {
     /// Cheap summary of what is shown; the image is only rebuilt when it changes.
     shown: String,
     down: Option<Instant>,
-    /// A tap waiting to see if a second tap follows (top laner key only).
+    /// Time of a tap waiting to see if a second tap follows (enemy keys).
     pending_tap: Option<Instant>,
     /// Timer action placed on a dial (true) or on a normal key (false).
     encoder: bool,
@@ -120,7 +120,7 @@ impl App {
         list
     }
 
-    /// Display order of an enemy's two spells: [short press, long press] as spell indexes.
+    /// Display order of an enemy's two spells: [single tap, double-tap] as spell indexes.
     fn order(&self, slot: usize) -> [usize; 2] {
         let Some(e) = self.enemies.get(slot) else { return [0, 1] };
         let s = self.settings.lock().unwrap();
@@ -137,6 +137,12 @@ impl App {
     }
 
     fn start(&mut self, ctx: &str, slot: usize, idx: usize) {
+        self.start_at(ctx, slot, idx, Instant::now());
+    }
+
+    /// Starts a timer as if the key was pressed at `at`, so waiting to tell
+    /// a tap from a double-tap does not cost time on the timer.
+    fn start_at(&mut self, ctx: &str, slot: usize, idx: usize, at: Instant) {
         let Some(e) = self.enemies.get(slot) else {
             self.out.push(json!({ "event": "showAlert", "context": ctx }));
             return;
@@ -160,7 +166,7 @@ impl App {
             spell.cooldown
         };
         let secs = (base * 100.0 / (100.0 + haste) - s.offset).max(1.0);
-        self.timers[slot][idx] = Some(Timer { end: Instant::now() + Duration::from_secs_f64(secs), total: secs });
+        self.timers[slot][idx] = Some(Timer { end: at + Duration::from_secs_f64(secs), total: secs });
         self.fresh[slot][idx] = None;
         self.last_started = Some((slot, idx));
     }
@@ -183,15 +189,52 @@ impl App {
         }
     }
 
-    /// Tap = more important spell, hold = the other one.
-    fn press_enemy(&mut self, ctx: &str, slot: usize, long: bool) {
+    /// Tracked spells of an enemy, most important first.
+    fn visible(&self, slot: usize) -> Vec<usize> {
         let hidden = self.hidden(slot);
-        let visible: Vec<usize> = self.order(slot).into_iter().filter(|i| !hidden[*i]).collect();
+        self.order(slot).into_iter().filter(|i| !hidden[*i]).collect()
+    }
+
+    /// Single tap = more important spell, double-tap (`second`) = the other one.
+    fn press_enemy(&mut self, ctx: &str, slot: usize, second: bool, at: Instant) {
+        let visible = self.visible(slot);
         match visible.len() {
-            // Only one tracked spell (e.g. jungler with Smite): tap and hold both start it.
-            1 => self.start(ctx, slot, visible[0]),
-            2 => self.start(ctx, slot, visible[long as usize]),
+            // Only one tracked spell (e.g. jungler with Smite): any press starts it.
+            1 => self.start_at(ctx, slot, visible[0], at),
+            2 => self.start_at(ctx, slot, visible[second as usize], at),
             _ => self.out.push(json!({ "event": "showAlert", "context": ctx })),
+        }
+    }
+
+    /// Enemy key released.
+    /// Tap = more important spell, double-tap = other spell, long press = quest
+    /// Teleport (enemy top laner without Teleport; on other enemies it starts
+    /// the other spell).
+    fn release_enemy(&mut self, ctx: &str, slot: usize, long: bool) {
+        let now = Instant::now();
+        let Some(pending) = self.instances.get_mut(ctx).map(|i| i.pending_tap.take()) else { return };
+        if long {
+            if let Some(first) = pending {
+                self.press_enemy(ctx, slot, false, first);
+            }
+            if self.enemies.get(slot).is_some_and(|e| e.quest_tp.is_some()) {
+                self.start(ctx, slot, QUEST_TP);
+            } else {
+                self.press_enemy(ctx, slot, true, now);
+            }
+        } else if let Some(first) = pending.filter(|t| now.duration_since(*t) < DOUBLE_TAP) {
+            self.press_enemy(ctx, slot, true, first);
+        } else if self.visible(slot).len() == 2 {
+            // A tap whose window passed but was not handled yet (tick runs every 250 ms).
+            if let Some(first) = pending {
+                self.press_enemy(ctx, slot, false, first);
+            }
+            // Wait briefly to tell a tap from a double-tap.
+            if let Some(i) = self.instances.get_mut(ctx) {
+                i.pending_tap = Some(now);
+            }
+        } else {
+            self.press_enemy(ctx, slot, false, now);
         }
     }
 
@@ -256,19 +299,7 @@ impl App {
                         self.manual_insight[slot] = Some(!self.insight(slot));
                         self.edit_mode = false;
                     }
-                    Kind::Enemy => {
-                        let has_quest = self.enemies.get(slot).is_some_and(|e| e.quest_tp.is_some());
-                        if long || !has_quest {
-                            self.press_enemy(&ctx, slot, long);
-                        } else if let Some(i) = self.instances.get_mut(&ctx) {
-                            // Top laner: wait briefly to tell a tap from a double-tap.
-                            if i.pending_tap.take().is_some() {
-                                self.start(&ctx, slot, QUEST_TP);
-                            } else {
-                                i.pending_tap = Some(Instant::now() + DOUBLE_TAP);
-                            }
-                        }
-                    }
+                    Kind::Enemy => self.release_enemy(&ctx, slot, long),
                     Kind::Insight => self.edit_mode = !self.edit_mode,
                     Kind::Reset if long => self.clear_timers(),
                     Kind::Reset => {
@@ -311,6 +342,7 @@ impl App {
                 self.enemies = list;
             }
             Update::NoGame => {
+                self.instances.values_mut().for_each(|i| i.pending_tap = None);
                 self.enemies.clear();
                 self.clear_timers();
                 self.manual_insight = [None; 5];
@@ -322,17 +354,18 @@ impl App {
 
     fn tick(&mut self) {
         let now = Instant::now();
-        let due: Vec<(String, usize)> = self
+        // Single taps whose double-tap window has passed.
+        let due: Vec<(String, usize, Instant)> = self
             .instances
             .iter_mut()
-            .filter(|(_, i)| i.pending_tap.is_some_and(|t| t <= now))
-            .map(|(ctx, i)| {
+            .filter_map(|(ctx, i)| {
+                let first = i.pending_tap.filter(|t| now.duration_since(*t) >= DOUBLE_TAP)?;
                 i.pending_tap = None;
-                (ctx.clone(), i.slot)
+                Some((ctx.clone(), i.slot, first))
             })
             .collect();
-        for (ctx, slot) in due {
-            self.press_enemy(&ctx, slot, false);
+        for (ctx, slot, first) in due {
+            self.press_enemy(&ctx, slot, false, first);
         }
         let mut ring = false;
         for s in 0..5 {

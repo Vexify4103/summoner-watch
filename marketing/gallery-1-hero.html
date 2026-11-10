@@ -7,9 +7,8 @@
   .left .tag { margin-top: 18px; }
   .points { margin-top: 40px; list-style: none; font-size: 28px; line-height: 1.8; }
   .points li::before { content: "◆"; color: var(--gold); margin-right: 16px; font-size: 22px; }
-  .right { position: absolute; right: 120px; top: 70px; width: 720px; }
-  .right .keys { grid-template-columns: repeat(4, 1fr); }
-  .right .key { aspect-ratio: 1; }
+  /* Official Stream Deck + photo, device at x 350-1440, y 185-995 of 1800x1200. */
+  .plus { left: 790px; top: -45px; transform: scale(0.72); }
 </style></head>
 <body>
   <div class="left">
@@ -23,22 +22,19 @@
     </ul>
   </div>
 
-  <div class="right">
-    <div class="device">
-      <div class="keys">
-        <div class="key"><img src="keys/k0.svg"></div>
-        <div class="key"><img src="keys/k1.svg"></div>
-        <div class="key"><img src="keys/k2.svg"></div>
-        <div class="key"><img src="keys/k3.svg"></div>
-        <div class="key"><img src="keys/k4.svg"></div>
-        <div class="key"><img src="keys/insight.svg"></div>
-        <div class="key"><img src="keys/reset.svg"></div>
-        <div class="key blank"></div>
-      </div>
-      <div class="strip" id="strip"></div>
-      <div class="dials"><div class="dial"></div><div class="dial"></div><div class="dial"></div><div class="dial"></div></div>
-    </div>
+  <div class="photo plus">
+    <img class="base" src="official/stream-deck-plus-blank.png">
+    <div class="k" data-quad="[[512,258],[635,258],[635,334],[512,334]]"><img src="keys/k0.svg"></div>
+    <div class="k" data-quad="[[727,258],[850,258],[850,334],[727,334]]"><img src="keys/k1.svg"></div>
+    <div class="k" data-quad="[[942,258],[1065,258],[1065,334],[942,334]]"><img src="keys/k2.svg"></div>
+    <div class="k" data-quad="[[1156,257],[1281,257],[1281,334],[1156,334]]"><img src="keys/k3.svg"></div>
+    <div class="k" data-quad="[[505,367],[631,367],[631,450],[505,450]]"><img src="keys/k4.svg"></div>
+    <div class="k" data-quad="[[724,367],[850,367],[850,448],[724,448]]"><img src="keys/insight.svg"></div>
+    <div class="k" data-quad="[[942,367],[1069,367],[1069,450],[942,450]]"><img src="keys/reset.svg"></div>
+    <div class="k" data-quad="[[1160,366],[1287,366],[1287,447],[1160,447]]"></div>
+    <div class="strip" id="strip" data-quad="[[485,525],[1307,525],[1307,596],[485,596]]"></div>
   </div>
   <div class="footer">Summoner Watch isn't endorsed by Riot Games. League of Legends is a trademark of Riot Games, Inc.</div>
   <script src="strip.js"></script>
+  <script src="photo.js"></script>
 </body></html>

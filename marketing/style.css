@@ -31,6 +31,17 @@ h2 { font-size: 64px; font-weight: 800; letter-spacing: -0.5px; }
   text-align: center; font-size: 15px; color: rgba(169, 176, 214, 0.55);
 }
 
+/* Official Elgato product photo (marketing/official, 1800x1200 px) with the
+   plugin's key images mapped onto its key screens by photo.js. All positions
+   inside .photo are in the photo's own pixels; scale the whole box. */
+.photo { position: absolute; width: 1800px; height: 1200px; transform-origin: 0 0; }
+.photo > img.base { position: absolute; left: 0; top: 0; width: 1800px; height: 1200px; }
+.photo .grid { position: absolute; left: 0; top: 0; display: grid; transform-origin: 0 0; }
+.photo .grid > div { width: 144px; height: 144px; border-radius: 18px; overflow: hidden; background: #000; }
+.photo .grid img, .photo .k img { width: 100%; height: 100%; display: block; }
+.photo .k { position: absolute; left: 0; top: 0; width: 144px; height: 144px; border-radius: 18px; overflow: hidden; background: #000; transform-origin: 0 0; }
+.photo .strip { position: absolute; left: 0; top: 0; width: 800px; height: 100px; margin: 0; transform-origin: 0 0; border-radius: 0; }
+
 /* Stream Deck hardware mockups */
 .device {
   background: linear-gradient(180deg, #1c1f26, var(--device));

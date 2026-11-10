@@ -58,16 +58,18 @@ settings and set "Enemy".
 ## In game
 
 - **Tap an enemy key:** start the timer for their more important spell (left icon).
-- **Hold the key (0.5 s):** start the timer for their other spell (right icon).
+- **Double-tap the key:** start the timer for their other spell (right icon).
 - "More important" comes from the **Spell order** setting, not from D/F slots. Default:
   Flash > Teleport > Ignite > Cleanse > Exhaust > Barrier > Heal > Ghost > Smite.
   So Flash is always a tap, on D or F.
-- **Smite** is ignored by default. The jungler's key shows only their other spell; tap and
-  hold both start it.
-- **Double-tap the enemy top laner:** start their quest Teleport (390 s). Only shown when the top
-  laner has no Teleport of their own; a small TP icon sits left of the champion. Top laner =
-  scoreboard position TOP, or the first enemy in custom games. Taps on that one key wait 0.3 s
-  to tell a tap from a double-tap.
+- A single tap waits 0.3 s to tell it from a double-tap. The timer still counts from your
+  first tap, so no time is lost.
+- **Smite** is ignored by default. The jungler's key shows only their other spell; any press
+  starts it right away.
+- **Hold the enemy top laner's key (0.5 s):** start their quest Teleport (390 s). Only shown when
+  the top laner has no Teleport of their own; a small TP icon sits left of the champion. Top
+  laner = scoreboard position TOP, or the first enemy in custom games. On other enemy keys,
+  holding starts the other spell, same as a double-tap.
 - **Unleashed Teleport** (Teleport after 10:00): cooldown follows the enemy's level,
   330 s at level 1 down to 240 s at level 18, read live from the scoreboard.
 - **Tap a running spell again:** restart that timer.
@@ -144,7 +146,10 @@ window, and a GUI-subsystem build was flagged by Kaspersky.
 ## Store images
 
 `marketing/` holds the Elgato Marketplace thumbnail and gallery images (1920x960). They are
-HTML pages using the real key images from `fake_deck`. To re-render one with Edge:
+HTML pages using the real key images from `fake_deck`. Devices are official Elgato product
+photos from the [Elgato Media Room](https://www.elgato.com/s/media-room) (`marketing/official`,
+`*-front.png` as downloaded, `*-blank.png` with the key screens darkened); `photo.js` maps the
+key images onto their key screens. To re-render one with Edge:
 
 ```
 msedge --headless=new --hide-scrollbars --window-size=1920,960 --virtual-time-budget=8000 --screenshot=marketing	humbnail.png file:///<path>/marketing/thumbnail.html

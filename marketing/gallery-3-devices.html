@@ -1,12 +1,12 @@
 <!doctype html>
 <html><head><meta charset="utf-8"><link rel="stylesheet" href="style.css">
 <style>
-  .xl { position: absolute; left: 100px; top: 150px; width: 940px; }
-  .xl .keys { grid-template-columns: repeat(8, 1fr); gap: 14px; }
-  .xl .key { aspect-ratio: 1; border-radius: 12px; }
-  .xl .label { margin-top: 26px; text-align: center; font-size: 24px; color: var(--muted); }
-  .profile { display: flex; align-items: center; justify-content: center; flex-direction: column; color: #8b949e; font-weight: 700; font-size: 15px; }
-  .profile span { font-size: 34px; line-height: 1; margin-bottom: 4px; }
+  /* Official Stream Deck XL photo, device at x 181-1607, y 171-1040 of 1800x1200. */
+  .xl { left: -30px; top: 40px; transform: scale(0.66); }
+  .xl .grid { grid-template-columns: repeat(8, 144px); gap: 54px; }
+  .label { position: absolute; left: 90px; width: 940px; top: 745px; text-align: center; font-size: 24px; color: var(--muted); }
+  .grid .profile { display: flex; align-items: center; justify-content: center; flex-direction: column; color: #8b949e; font-weight: 700; font-size: 15px; }
+  .grid .profile span { font-size: 34px; line-height: 1; margin-bottom: 4px; }
   .right { position: absolute; left: 1120px; top: 120px; width: 700px; }
   .right h2 { font-size: 48px; white-space: nowrap; }
   .steps { margin-top: 40px; list-style: none; counter-reset: s; }
@@ -20,30 +20,25 @@
   .devices b { color: var(--text); }
 </style></head>
 <body>
-  <div class="xl">
-    <div class="device">
-      <div class="keys">
-        <div class="key"><img src="keys/k0.svg"></div>
-        <div class="key"><img src="keys/k1.svg"></div>
-        <div class="key"><img src="keys/k2.svg"></div>
-        <div class="key"><img src="keys/k3.svg"></div>
-        <div class="key"><img src="keys/xl_enemy5.svg"></div>
-        <div class="key"><img src="keys/insight.svg"></div>
-        <div class="key"><img src="keys/reset.svg"></div>
-        <div class="key profile"><span>⌂</span>MAIN</div>
-        <div class="key"><img src="keys/xl_timer1.svg"></div>
-        <div class="key"><img src="keys/xl_timer2.svg"></div>
-        <div class="key"><img src="keys/xl_timer3.svg"></div>
-        <div class="key"><img src="keys/xl_timer4.svg"></div>
-        <div class="key blank"></div><div class="key blank"></div><div class="key blank"></div><div class="key blank"></div>
-        <div class="key blank"></div><div class="key blank"></div><div class="key blank"></div><div class="key blank"></div>
-        <div class="key blank"></div><div class="key blank"></div><div class="key blank"></div><div class="key blank"></div>
-        <div class="key blank"></div><div class="key blank"></div><div class="key blank"></div><div class="key blank"></div>
-        <div class="key blank"></div><div class="key blank"></div><div class="key blank"></div><div class="key blank"></div>
-      </div>
+  <div class="photo xl">
+    <img class="base" src="official/stream-deck-xl-blank.png">
+    <div class="grid" data-quad="[[317,541],[1476,541],[1446,958],[343,958]]">
+      <div><img src="keys/k0.svg"></div>
+      <div><img src="keys/k1.svg"></div>
+      <div><img src="keys/k2.svg"></div>
+      <div><img src="keys/k3.svg"></div>
+      <div><img src="keys/xl_enemy5.svg"></div>
+      <div><img src="keys/insight.svg"></div>
+      <div><img src="keys/reset.svg"></div>
+      <div class="profile"><span>⌂</span>MAIN</div>
+      <div><img src="keys/xl_timer1.svg"></div>
+      <div><img src="keys/xl_timer2.svg"></div>
+      <div><img src="keys/xl_timer3.svg"></div>
+      <div><img src="keys/xl_timer4.svg"></div>
+      <div></div><div></div><div></div><div></div><div></div><div></div><div></div><div></div><div></div><div></div><div></div><div></div><div></div><div></div><div></div><div></div><div></div><div></div><div></div><div></div>
     </div>
-    <div class="label">Stream Deck XL: enemies on top, soonest timers below</div>
   </div>
+  <div class="label">Stream Deck XL: enemies on top, soonest timers below</div>
 
   <div class="right">
     <h2>Works on every <span class="gold">Stream Deck</span></h2>
@@ -59,4 +54,5 @@
     </div>
   </div>
   <div class="footer">Summoner Watch isn't endorsed by Riot Games. League of Legends is a trademark of Riot Games, Inc.</div>
+  <script src="photo.js"></script>
 </body></html>

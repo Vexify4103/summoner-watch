@@ -2,7 +2,7 @@
   "$schema": "https://schemas.elgato.com/streamdeck/plugins/manifest.json",
   "UUID": "com.vexify4103.summonerwatch",
   "Name": "Summoner Watch",
-  "Version": "0.1.4.0",
+  "Version": "0.1.5.0",
   "Author": "Vexify4103",
   "Description": "Enemy summoner spell timers for League of Legends. Press when an enemy uses Flash, see the countdown, hear when it is back.",
   "URL": "https://github.com/Vexify4103/summoner-watch",
@@ -31,7 +31,7 @@
     {
       "UUID": "com.vexify4103.summonerwatch.enemy",
       "Name": "Enemy",
-      "Tooltip": "Tap: more important spell. Hold: other spell. Enemy top laner: double-tap = quest Teleport.",
+      "Tooltip": "Tap: more important spell. Double-tap: other spell. Enemy top laner: hold = quest Teleport.",
       "Icon": "imgs/action",
       "Controllers": [
         "Keypad"

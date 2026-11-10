@@ -126,7 +126,7 @@ pub fn enemy_key(
             SpellState::Ready => {}
         }
     }
-    // Quest Teleport: small icon left of the champion (double-tap to start).
+    // Quest Teleport: small icon left of the champion (long press to start).
     if let Some(q) = &e.quest_tp {
         let state = states[crate::game::QUEST_TP];
         if state == SpellState::Fresh {
