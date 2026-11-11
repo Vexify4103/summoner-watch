@@ -121,9 +121,12 @@ fn main() {
     press(&mut ws, "k4", 50);
     pump(&mut ws, 1.5, &mut log);
     // Double-tap Jinx = her other spell (Heal).
-    press(&mut ws, "k3", 40);
-    std::thread::sleep(Duration::from_millis(80));
-    press(&mut ws, "k3", 40);
+    for _ in 0..2 {
+        send(&mut ws, json!({ "event": "keyDown", "context": "k3" }));
+        pump(&mut ws, 0.04, &mut log);
+        send(&mut ws, json!({ "event": "keyUp", "context": "k3" }));
+        pump(&mut ws, 0.06, &mut log);
+    }
     // Hold Wukong (top, no TP) = quest Teleport. Keep reading during the hold,
     // like Stream Deck does, so the plugin is not blocked sending images.
     send(&mut ws, json!({ "event": "keyDown", "context": "k0" }));

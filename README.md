@@ -73,7 +73,9 @@ settings and set "Enemy".
 - **Unleashed Teleport** (Teleport after 10:00): cooldown follows the enemy's level,
   330 s at level 1 down to 240 s at level 18, read live from the scoreboard.
 - **Tap a running spell again:** restart that timer.
-- **Rotate a dial:** move that timer 5 s per click (fix a late press).
+- **Rotate a dial:** move that timer 5 s per click (fix a late press). The timers keep their
+  places while you turn, and re-sort 2 s after the last click, so a timer that passes its
+  neighbour does not jump to another dial mid-turn. Timer keys work the same way.
 - **Push or tap a dial:** cancel that timer.
 
 Badges on the key:

@@ -66,7 +66,25 @@ struct App {
     manual_insight: [Option<bool>; 5],
     edit_mode: bool,
     last_started: Option<(usize, usize)>,
+    /// Timer order kept while a dial or Timer key is in use, so a timer that
+    /// passes its neighbour does not jump to another dial mid-turn:
+    /// (keep until, (enemy, spell) in display order).
+    frozen: Option<(Instant, Vec<(usize, usize)>)>,
     out: Vec<Value>,
+}
+
+/// How long the timer order stays fixed after the last dial turn or Timer key press.
+const ORDER_HOLD: Duration = Duration::from_millis(2000);
+
+/// Sorts running timers by time left. With a `frozen` order, timers keep
+/// those positions; timers started since then follow, sorted.
+fn order_timers(mut list: Vec<(usize, usize, f64, f64)>, frozen: Option<&[(usize, usize)]>) -> Vec<(usize, usize, f64, f64)> {
+    list.sort_by(|a, b| a.2.total_cmp(&b.2));
+    if let Some(order) = frozen {
+        let pos = |t: &(usize, usize, f64, f64)| order.iter().position(|&o| o == (t.0, t.1)).unwrap_or(usize::MAX);
+        list.sort_by_key(pos); // stable: new timers keep their time order at the end
+    }
+    list
 }
 
 /// Enemy index or timer rank for an action. `cols` = key columns of that device
@@ -103,9 +121,11 @@ impl App {
         self.timers = [[None; 3]; 5];
         self.fresh = [[None; 3]; 5];
         self.last_started = None;
+        self.frozen = None;
     }
 
-    /// Running timers sorted by time left: (enemy, spell, remaining, total).
+    /// Running timers in display order: (enemy, spell, remaining, total).
+    /// Sorted by time left, except while the order is frozen (see `frozen`).
     fn running(&self) -> Vec<(usize, usize, f64, f64)> {
         let now = Instant::now();
         let mut list = Vec::new();
@@ -116,8 +136,13 @@ impl App {
                 }
             }
         }
-        list.sort_by(|a, b| a.2.total_cmp(&b.2));
-        list
+        let frozen = self.frozen.as_ref().filter(|(until, _)| now < *until).map(|(_, o)| o.as_slice());
+        order_timers(list, frozen)
+    }
+
+    /// Keeps the current timer order for ORDER_HOLD from now.
+    fn hold_order(&mut self, order: &[(usize, usize, f64, f64)]) {
+        self.frozen = Some((Instant::now() + ORDER_HOLD, order.iter().map(|t| (t.0, t.1)).collect()));
     }
 
     /// Display order of an enemy's two spells: [single tap, double-tap] as spell indexes.
@@ -173,7 +198,9 @@ impl App {
 
     /// Moves the Nth soonest timer by `delta` seconds (never below 1s left).
     fn adjust_rank(&mut self, rank: usize, delta: f64) {
-        if let Some(&(s, i, ..)) = self.running().get(rank) {
+        let order = self.running();
+        self.hold_order(&order);
+        if let Some(&(s, i, ..)) = order.get(rank) {
             if let Some(t) = self.timers[s][i].as_mut() {
                 let now = Instant::now();
                 let left = (t.end.saturating_duration_since(now).as_secs_f64() + delta).max(1.0);
@@ -184,7 +211,9 @@ impl App {
     }
 
     fn cancel_rank(&mut self, rank: usize) {
-        if let Some(&(s, i, ..)) = self.running().get(rank) {
+        let order = self.running();
+        self.hold_order(&order);
+        if let Some(&(s, i, ..)) = order.get(rank) {
             self.timers[s][i] = None;
         }
     }
@@ -520,6 +549,7 @@ fn main() {
         manual_insight: [None; 5],
         edit_mode: false,
         last_started: None,
+        frozen: None,
         out: vec![
             json!({ "event": register, "uuid": uuid }),
             json!({ "event": "getGlobalSettings", "context": uuid }),
@@ -557,6 +587,17 @@ mod tests {
 
     fn at(col: u64, row: u64) -> Value {
         json!({ "column": col, "row": row })
+    }
+
+    #[test]
+    fn frozen_timer_order_survives_a_pass() {
+        // Dial 1 shows Flash (100 s), dial 2 Heal (120 s). Dial 1 adds 30 s.
+        let after = vec![(0, 0, 130.0, 300.0), (1, 0, 120.0, 240.0), (2, 1, 50.0, 300.0)];
+        let sorted = order_timers(after.clone(), None);
+        assert_eq!(sorted.iter().map(|t| (t.0, t.1)).collect::<Vec<_>>(), [(2, 1), (1, 0), (0, 0)]);
+        // While frozen, Flash stays on dial 1; the timer started since then goes last.
+        let frozen = order_timers(after, Some(&[(0, 0), (1, 0)]));
+        assert_eq!(frozen.iter().map(|t| (t.0, t.1)).collect::<Vec<_>>(), [(0, 0), (1, 0), (2, 1)]);
     }
 
     #[test]
