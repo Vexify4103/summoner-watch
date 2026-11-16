@@ -1,17 +1,15 @@
 {
     servers {
         timeouts {
+            # No read_body/write timeouts: they would cut long-lived WebSockets.
             read_header 5s
-            read_body 5s
-            write 5s
             idle 30s
         }
     }
 }
 
 timers.example.com {
-    request_body {
-        max_size 16KB
-    }
+    # Caddy proxies WebSocket upgrades (/v1/ws) automatically and appends the
+    # client address to X-Forwarded-For, which the relay uses for its limits.
     reverse_proxy 127.0.0.1:8787
 }

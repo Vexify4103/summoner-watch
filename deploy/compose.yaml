@@ -7,6 +7,9 @@ services:
     environment:
       # Empty = public relay. For a private relay: a random 32-character hex key.
       SUMMONER_RELAY_KEY: ${SUMMONER_RELAY_KEY:-}
+      # Real client IP from the reverse proxy, for per-IP limits. Trusted only from
+      # loopback/private addresses. Behind Cloudflare use CF-Connecting-IP.
+      SUMMONER_RELAY_IP_HEADER: ${SUMMONER_RELAY_IP_HEADER:-X-Forwarded-For}
     read_only: true
     cap_drop: [ALL]
     security_opt: [no-new-privileges:true]

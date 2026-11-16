@@ -7,7 +7,7 @@ sound when the spell is back, and stays green for 20 seconds so you can glance a
 Champions, spell icons, cooldowns, boots and levels fill in automatically.
 
 - Works on Stream Deck + (keys, dials and touch strip) and on Stream Deck XL / MK.2 (keys only).
-- Native Rust exe: ~1.5 MB, a few MB of RAM, idle while League is closed.
+- Native Rust exe: ~2.8 MB, a few MB of RAM, idle while League is closed.
 - Windows only (League's Live Client API and sound playback). Stream Deck app 6.9 or newer.
 
 **Fair play:** Summoner Watch never detects when an enemy uses a spell. Timers start only
@@ -99,8 +99,9 @@ every match and for the enemy team. It is not a secret: the enemy team sees the 
 names. With a premade, enter the same **Party code** (any text) to keep others out.
 Spectators and replays never join a room.
 
-Everyone in the room can start, restart, adjust and cancel timers. The relay orders
-changes and sends the same countdowns to everyone. Undo reverses only your own newest
+Everyone in the room can start, restart, adjust and cancel timers. The plugin keeps
+one WebSocket to the relay; the relay orders changes and pushes the same countdowns
+to everyone right away. Undo reverses only your own newest
 start, and holding Reset only removes your own starts; teammates' timers stay. Haste
 and offset come from the PC that starts a timer. Sound and display preferences stay local.
 

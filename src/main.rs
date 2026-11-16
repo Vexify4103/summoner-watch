@@ -221,8 +221,8 @@ impl App {
                 for (idx, cell) in row.iter_mut().enumerate() {
                     let Some(t) = self.timers[slot][idx].filter(|t| t.end > now && cell.is_none()) else { continue };
                     let remaining_ms = t.end.duration_since(now).as_millis() as u64;
-                    let total_ms = ((t.total * 1000.0) as u64).clamp(remaining_ms, 1_200_000);
                     if remaining_ms > 0 && remaining_ms <= 1_200_000 {
+                        let total_ms = ((t.total * 1000.0) as u64).clamp(remaining_ms, 1_200_000);
                         *cell = Some(t);
                         self.sync.submit(Command::Seed { key: self.shared_key(slot, idx), remaining_ms, total_ms });
                     }
@@ -925,26 +925,11 @@ mod tests {
 
     #[cfg(feature = "relay")]
     #[test]
-    fn two_apps_converge_through_real_http_client_workers() {
-        let server = Arc::new(tiny_http::Server::http("127.0.0.1:0").unwrap());
-        let url = format!("http://{}", server.server_addr());
-        let endpoint = server.clone();
-        let stopped = Arc::new(AtomicBool::new(false));
-        let stop = stopped.clone();
-        let handle = std::thread::spawn(move || {
-            let mut room = summoner_watch::shared::Room::default();
-            let start = Instant::now();
-            while !stop.load(Ordering::Relaxed) {
-                let Some(mut req) = endpoint.recv_timeout(Duration::from_millis(50)).unwrap() else { continue };
-                assert_eq!(req.url(), "/v1/exchange");
-                assert!(req.headers().iter().any(|h| h.field.equiv("Authorization") && h.value.as_str() == format!("Bearer {}", sync::room_code(&"ab".repeat(32), ""))));
-                let mut body = String::new();
-                req.as_reader().read_to_string(&mut body).unwrap();
-                let exchange = serde_json::from_str(&body).unwrap();
-                let snapshot = room.exchange(&exchange, start.elapsed().as_millis() as u64).unwrap();
-                req.respond(tiny_http::Response::from_string(serde_json::to_string(&snapshot).unwrap())).unwrap();
-            }
-        });
+    fn two_apps_converge_through_the_websocket_relay() {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let url = format!("http://{}", listener.local_addr().unwrap());
+        let config = summoner_watch::relay::Config { access_key: "cd".repeat(16), ip_header: None };
+        std::thread::spawn(move || summoner_watch::relay::serve(listener, config));
         let mut a = app();
         let mut b = app();
         for app in [&mut a, &mut b] {
@@ -986,8 +971,6 @@ mod tests {
         pump(&mut a, &mut b, |a, _| a.timers[0][0].is_none());
         assert!(a.timers[1][1].is_some(), "b's start survives a's reset");
         assert!(b.timers[1][1].is_some(), "sync-off must retain local countdowns");
-        stopped.store(true, Ordering::Relaxed);
-        handle.join().unwrap();
     }
 
     fn at(col: u64, row: u64) -> Value {

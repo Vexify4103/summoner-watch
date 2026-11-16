@@ -64,6 +64,20 @@ pub struct Exchange {
     pub operations: Vec<Operation>,
 }
 
+/// First message on a relay connection. Later client messages are
+/// `Vec<Operation>`; the relay answers with a [`Snapshot`] after every change in
+/// the room, or `{"error": "..."}` before closing.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct Hello {
+    /// Room code, see `valid_code`.
+    pub room: String,
+    pub client: String,
+    pub roster: Vec<String>,
+    /// Relay key; only private relays check it.
+    #[serde(default)]
+    pub key: String,
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Snapshot {
     pub now_ms: u64,
@@ -145,6 +159,21 @@ impl Room {
             acknowledged,
             timers: self.timers.values().cloned().collect(),
         })
+    }
+
+    /// Forgets sessions that are gone, so restarts do not fill the room.
+    pub fn retain_clients(&mut self, keep: impl Fn(&str) -> bool) {
+        self.clients.retain(|client, _| keep(client));
+    }
+
+    /// Current timers, with the given client's acknowledged sequence number.
+    pub fn snapshot_for(&self, client: &str, now_ms: u64) -> Snapshot {
+        Snapshot {
+            now_ms,
+            revision: self.revision,
+            acknowledged: *self.clients.get(client).unwrap_or(&0),
+            timers: self.timers.values().filter(|t| t.end_ms > now_ms).cloned().collect(),
+        }
     }
 
     fn apply(&mut self, command: &Command, client: &str, now: u64) {

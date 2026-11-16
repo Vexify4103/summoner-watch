@@ -10,8 +10,9 @@ docker compose -f deploy/compose.yaml up -d --build
 curl http://127.0.0.1:8787/health
 ```
 
-The health response is `{"ok":true}`. The container listens only on the Pi's
-loopback interface. Put an HTTPS reverse proxy in front of it before connecting
+The health response is `{"ok":true}`. Plugins connect with a WebSocket to
+`wss://your-hostname/v1/ws`; changes are pushed to teammates right away. The
+container listens only on the Pi's loopback interface. Put an HTTPS reverse proxy in front of it before connecting
 teammates over the internet. The client accepts plain HTTP only on localhost for
 testing or an SSH tunnel; certificates are verified for every remote connection.
 
@@ -66,15 +67,35 @@ does not have are added to it (they never replace a room timer and are not undo
 steps), then the room's timers are shown. Turning sync off keeps the countdowns on
 that PC; later changes stay local.
 
-## Privacy and limits
+## Limits
+
+Each connection thread uses little memory; the container is capped at 128 MB.
+
+| Limit | Value |
+|---|---|
+| Connections in total / per client IP | 512 / 8 |
+| Rooms in total | 1024 |
+| New rooms per client IP per hour | 30 |
+| Messages per connection | 10 per second, bursts of 30 |
+| Message size | 16 KB |
+| First message (hello) | within 5 s |
+| Silent connection closed after | 60 s (plugins ping every 10 s) |
+
+A client that breaks a limit is disconnected. Limits per client IP need the real
+address: the relay reads it from `SUMMONER_RELAY_IP_HEADER` (default
+`X-Forwarded-For` in `compose.yaml`), but only when the connection comes from a
+loopback or private address, such as Caddy on the same machine or the Docker
+bridge. Behind Cloudflare set it to `CF-Connecting-IP`. Without the header every
+client looks like the proxy, and the per-IP limits apply to everyone together.
+
+## Privacy
 
 The relay keeps timers, a bounded undo history, random client IDs, enemy
-champion/spell identifiers and room codes **in memory only**. Rooms expire after two
-hours without requests; restarting the server clears everything. It never receives
+champion/spell identifiers and room codes **in memory only**. A room expires two hours
+after its last player left; restarting the server clears everything. It never receives
 Riot IDs, the party code itself, Riot API keys, sound files or analytics. The HTTPS
 proxy/network layer sees client IP addresses; the supplied Caddy config does not
-enable access logging. The relay has limits of 128 rooms and 32 client sessions per
-room; restarting the plugin creates a new session.
+enable access logging. A room holds at most 32 connected plugins at once.
 
 For local development without Docker:
 
@@ -83,4 +104,4 @@ cargo run --release --features relay --bin summoner-watch-relay
 ```
 
 It binds to `127.0.0.1:8787` by default. `SUMMONER_RELAY_BIND` can override this for
-container networking; do not expose its HTTP listener directly to the internet.
+container networking; do not expose its plain listener directly to the internet.
