@@ -57,7 +57,7 @@ struct Deck {
 
 impl Deck {
     fn send(&mut self, v: Value) {
-        self.ws.send(Message::Text(v.to_string().into())).unwrap();
+        self.ws.send(Message::Text(v.to_string())).unwrap();
     }
 
     fn pump(&mut self, secs: f64) {
@@ -172,5 +172,6 @@ fn main() {
     let _ = deck.ws.close(None);
     std::thread::sleep(Duration::from_millis(300));
     let _ = child.kill();
+    let _ = child.wait();
     println!("frames: {}", deck.frame);
 }

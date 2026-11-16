@@ -84,7 +84,7 @@ fn main() {
             }
         }
     };
-    let send = |ws: &mut tungstenite::WebSocket<std::net::TcpStream>, v: Value| ws.send(Message::Text(v.to_string().into())).unwrap();
+    let send = |ws: &mut tungstenite::WebSocket<std::net::TcpStream>, v: Value| ws.send(Message::Text(v.to_string())).unwrap();
 
     pump(&mut ws, 0.5, &mut log);
     send(&mut ws, json!({ "event": "didReceiveGlobalSettings", "payload": { "settings": { "offset": "3", "volume": 40, "sound": "ding" } } }));
@@ -97,7 +97,7 @@ fn main() {
     }
     send(&mut ws, json!({ "event": "willAppear", "action": "com.vexify4103.summonerwatch.insight", "context": "insight", "payload": { "settings": {}, "coordinates": { "column": 1, "row": 1 } } }));
     send(&mut ws, json!({ "event": "willAppear", "action": "com.vexify4103.summonerwatch.reset", "context": "reset", "payload": { "settings": {}, "coordinates": { "column": 2, "row": 1 } } }));
-    for d in 0..2 {
+    for d in 0..4 {
         send(&mut ws, json!({ "event": "willAppear", "action": "com.vexify4103.summonerwatch.dial", "context": format!("dial{d}"), "payload": { "settings": {}, "controller": "Encoder", "coordinates": { "column": d, "row": 0 } } }));
     }
     // Stream Deck XL: enemy key at column 4 (= enemy 5) and a Timer action on a normal key.
@@ -109,9 +109,9 @@ fn main() {
 
     // Wukong (Lucidity boots): tap = Flash. Lee Sin: Smite is ignored, so any press = Flash. Kai'Sa: toggle Insight then Flash.
     let press = |ws: &mut tungstenite::WebSocket<std::net::TcpStream>, ctx: &str, hold_ms: u64| {
-        ws.send(Message::Text(json!({ "event": "keyDown", "context": ctx }).to_string().into())).unwrap();
+        ws.send(Message::Text(json!({ "event": "keyDown", "context": ctx }).to_string())).unwrap();
         std::thread::sleep(Duration::from_millis(hold_ms));
-        ws.send(Message::Text(json!({ "event": "keyUp", "context": ctx }).to_string().into())).unwrap();
+        ws.send(Message::Text(json!({ "event": "keyUp", "context": ctx }).to_string())).unwrap();
     };
     press(&mut ws, "k0", 50);
     press(&mut ws, "k1", 600);
@@ -137,12 +137,14 @@ fn main() {
     send(&mut ws, json!({ "event": "dialRotate", "context": "dial0", "payload": { "ticks": -100 } }));
     pump(&mut ws, 3.0, &mut log);
 
+    let mut dials = serde_json::Map::new();
     for (ctx, v) in &images {
         if v["event"] == "setImage" {
             let url = v["payload"]["image"].as_str().unwrap();
             let svg = base64::engine::general_purpose::STANDARD.decode(url.trim_start_matches("data:image/svg+xml;base64,")).unwrap();
             std::fs::write(format!("{out_dir}/{ctx}.svg"), svg).unwrap();
         } else {
+            dials.insert(ctx.clone(), v["payload"].clone());
             let mut fb = v["payload"].clone();
             for k in ["champ", "spell"] {
                 let s = fb[k].as_str().unwrap_or("");
@@ -151,6 +153,9 @@ fn main() {
             println!("{ctx} feedback: {fb}");
         }
     }
+    std::fs::write(format!("{out_dir}/dials.json"), serde_json::to_string_pretty(&dials).unwrap()).unwrap();
+    let layout: Value = serde_json::from_str(include_str!("../com.vexify4103.summonerwatch.sdPlugin/layouts/dial.json")).unwrap();
+    std::fs::write(format!("{out_dir}/capture.js"), format!("// Captured from the real plugin by fake_deck. Regenerate with tools/build-gallery.ps1.\nwindow.galleryCapture = {};\n", json!({ "feedback": dials, "layout": layout }))).unwrap();
     for l in &log {
         println!("log: {l}");
     }
@@ -158,4 +163,5 @@ fn main() {
     std::thread::sleep(Duration::from_millis(500));
     println!("plugin exited by itself: {}", child.try_wait().unwrap().is_some());
     let _ = child.kill();
+    let _ = child.wait();
 }

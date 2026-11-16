@@ -147,15 +147,22 @@ window, and a GUI-subsystem build was flagged by Kaspersky.
 
 ## Store images
 
-`marketing/` holds the Elgato Marketplace thumbnail and gallery images (1920x960). They are
-HTML pages using the real key images from `fake_deck`. Devices are official Elgato product
-photos from the [Elgato Media Room](https://www.elgato.com/s/media-room) (`marketing/official`,
-`*-front.png` as downloaded, `*-blank.png` with the key screens darkened); `photo.js` maps the
-key images onto their key screens. To re-render one with Edge:
+`marketing/` holds the Elgato Marketplace thumbnail and three gallery PNGs (1920x960).
+The gallery uses official Elgato product photos from the
+[Elgato Media Room](https://www.elgato.com/s/media-room), with actual plugin output on
+the screens. Keys and touch-strip feedback are captured together by `fake_deck`;
+the touch strip uses the real `layouts/dial.json` coordinates and captured timer values.
+XL screens are mapped individually to preserve the hardware's key spacing.
 
 ```
-msedge --headless=new --hide-scrollbars --window-size=1920,960 --virtual-time-budget=8000 --screenshot=marketing	humbnail.png file:///<path>/marketing/thumbnail.html
+powershell -ExecutionPolicy Bypass -File tools/build-gallery.ps1
 ```
+
+This rebuilds the plugin, captures its output, updates `marketing/keys` and
+`marketing/capture.js`, and renders the three PNGs with Edge. `-SkipCapture` renders
+the HTML using the saved capture. See [marketing/REVIEW.md](marketing/REVIEW.md) for
+the gallery assessment and the distinction between gallery media and the private
+verification video already supplied to Elgato.
 
 The demo video (`marketing/demo.gif` / `demo.mp4`, German captions) is recorded from the real
 plugin and rendered on a Stream Deck + mockup (needs Edge and ffmpeg):
@@ -171,6 +178,11 @@ python -I tools/render_demo.py target/demo marketing/demo
 [MIT](LICENSE)
 
 ## Legal
+
+AI tools assisted with development, documentation and gallery composition. The
+product logo was AI-generated. Gallery composites use official Elgato hardware
+photos and captured plugin output. See [MARKETPLACE.md](MARKETPLACE.md) for the
+submission draft and AI disclosure.
 
 Summoner Watch isn't endorsed by Riot Games and doesn't reflect the views or opinions of
 Riot Games or anyone officially involved in producing or managing Riot Games properties.
