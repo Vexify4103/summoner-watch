@@ -63,7 +63,7 @@ fn real_relay_isolates_rooms_orders_team_edits_and_deduplicates_retries() {
             .read_json()
             .unwrap()
     };
-    let code = "01".repeat(16);
+    let code = "01".repeat(32);
     assert!(matches!(agent.post(format!("{base}/v1/exchange"))
         .header("Authorization", format!("Bearer {code}"))
         .header("X-Relay-Key", "00".repeat(16))
@@ -77,14 +77,15 @@ fn real_relay_isolates_rooms_orders_team_edits_and_deduplicates_retries() {
     let original = first.timers[0].end_ms;
     assert_eq!(call(&code, &request("b", 0, None)).timers.len(), 1);
     call(&code, &request("b", 1, Some(start("Lux"))));
-    let undo = request("a", 2, Some(Command::Undo));
+    // Undo reverts only the sender's own start.
+    let undo = request("b", 2, Some(Command::Undo));
     let after = call(&code, &undo);
     assert_eq!(after.timers.len(), 1);
     assert_eq!(after.timers[0].key, key("Ahri"));
     assert_eq!(call(&code, &undo).timers.len(), 1); // lost-response retry
     let adjust = request(
         "b",
-        2,
+        3,
         Some(Command::Adjust {
             key: key("Ahri"),
             delta_ms: -5000,
@@ -93,7 +94,7 @@ fn real_relay_isolates_rooms_orders_team_edits_and_deduplicates_retries() {
     let adjusted = call(&code, &adjust).timers[0].end_ms;
     assert_eq!(adjusted, original - 5000);
     assert_eq!(call(&code, &adjust).timers[0].end_ms, adjusted);
-    assert!(call(&"02".repeat(16), &request("a", 0, None))
+    assert!(call(&"02".repeat(32), &request("a", 0, None))
         .timers
         .is_empty());
     let mut other_roster = request("a", 0, None);
@@ -105,7 +106,7 @@ fn real_relay_isolates_rooms_orders_team_edits_and_deduplicates_retries() {
             .send_json(request("a", 0, None)),
         Err(ureq::Error::StatusCode(401))
     ));
-    let mut invalid = request("a", 3, Some(start("Zed")));
+    let mut invalid = request("a", 2, Some(start("Zed")));
     assert!(matches!(
         agent
             .post(format!("{base}/v1/exchange"))
@@ -116,6 +117,6 @@ fn real_relay_isolates_rooms_orders_team_edits_and_deduplicates_retries() {
     ));
     invalid.operations.clear();
     assert_eq!(call(&code, &invalid).timers.len(), 1); // invalid mutation was atomic
-    call(&code, &request("a", 3, Some(Command::Reset)));
+    call(&code, &request("a", 2, Some(Command::Reset)));
     assert!(call(&code, &request("b", 0, None)).timers.is_empty());
 }

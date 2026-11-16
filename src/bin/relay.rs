@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use std::io::Read;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
-use summoner_watch::shared::{Exchange, Room};
+use summoner_watch::shared::{valid_code, Exchange, Room};
 use tiny_http::{Header, Method, Request, Response, Server};
 
 type Rooms = HashMap<(String, Vec<String>), (Instant, Room)>;
@@ -16,6 +16,7 @@ fn respond(request: Request, status: u16, body: String) {
 }
 
 fn handle(mut request: Request, rooms: &Mutex<Rooms>, access_key: &str) {
+    // Empty access key = public relay.
     if request.method() == &Method::Get && request.url() == "/health" {
         return respond(request, 200, "{\"ok\":true}".into());
     }
@@ -28,7 +29,8 @@ fn handle(mut request: Request, rooms: &Mutex<Rooms>, access_key: &str) {
         .find(|h| h.field.equiv("X-Relay-Key"))
         .map(|h| h.value.as_str())
         .unwrap_or("");
-    let authorized = supplied.len() == access_key.len()
+    let authorized = access_key.is_empty()
+        || supplied.len() == access_key.len()
         && supplied
             .bytes()
             .zip(access_key.bytes())
@@ -42,7 +44,7 @@ fn handle(mut request: Request, rooms: &Mutex<Rooms>, access_key: &str) {
         .iter()
         .find(|h| h.field.equiv("Authorization"))
         .and_then(|h| h.value.as_str().strip_prefix("Bearer "))
-        .filter(|code| code.len() == 32 && code.bytes().all(|c| c.is_ascii_hexdigit()))
+        .filter(|code| valid_code(code))
         .map(str::to_ascii_lowercase);
     let Some(code) = code else {
         return respond(request, 401, "{\"error\":\"invalid room code\"}".into());
@@ -93,8 +95,8 @@ fn handle(mut request: Request, rooms: &Mutex<Rooms>, access_key: &str) {
 
 fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let access_key = std::env::var("SUMMONER_RELAY_KEY").unwrap_or_default();
-    if access_key.len() != 32 || !access_key.bytes().all(|c| c.is_ascii_hexdigit()) {
-        return Err("Set SUMMONER_RELAY_KEY to a private random 32-character hex key".into());
+    if !access_key.is_empty() && (access_key.len() != 32 || !access_key.bytes().all(|c| c.is_ascii_hexdigit())) {
+        return Err("SUMMONER_RELAY_KEY must be empty (public relay) or a random 32-character hex key".into());
     }
     let bind = std::env::var("SUMMONER_RELAY_BIND").unwrap_or_else(|_| "127.0.0.1:8787".into());
     let server = Arc::new(Server::http(&bind)?);

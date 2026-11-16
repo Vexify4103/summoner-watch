@@ -1,7 +1,16 @@
 //! All relay I/O stays off the Stream Deck event/render thread.
 use std::sync::mpsc::{self, Receiver, SyncSender};
+use sha2::{Digest, Sha256};
 use std::time::{Duration, Instant};
-use summoner_watch::shared::{Command, Exchange, Operation, Snapshot};
+use summoner_watch::shared::{valid_code, Command, Exchange, Operation, Snapshot};
+
+/// Room for this team in this match. The party code (optional, any text) keeps
+/// out anyone who knows the player names but not the code.
+pub fn room_code(match_seed: &str, party_code: &str) -> String {
+    let text = format!("{match_seed}
+{}", party_code.trim());
+    Sha256::digest(text.as_bytes()).iter().map(|b| format!("{b:02x}")).collect()
+}
 
 #[derive(Clone, Debug, PartialEq, Eq, Default)]
 pub struct Config {
@@ -20,10 +29,10 @@ impl Config {
         (url.scheme_str() == Some("https") || (local && url.scheme_str() == Some("http")))
             && url.authority().is_some_and(|a| !a.as_str().contains('@'))
             && url.query().is_none()
-            && self.code.len() == 32
-            && self.access_key.len() == 32
-            && self.access_key.bytes().all(|c| c.is_ascii_hexdigit())
-            && self.code.bytes().all(|c| c.is_ascii_hexdigit())
+            && valid_code(&self.code)
+            // The relay key is only for private relays; public relays have none.
+            && (self.access_key.is_empty()
+                || (self.access_key.len() == 32 && self.access_key.bytes().all(|c| c.is_ascii_hexdigit())))
             && !self.roster.is_empty()
     }
 }
@@ -144,10 +153,13 @@ fn worker(jobs: Receiver<Job>, events: SyncSender<Event>) {
             operations,
         };
         let before = Instant::now();
-        let result = agent
+        let mut post = agent
             .post(format!("{}/v1/exchange", config.url.trim_end_matches('/')))
-            .header("Authorization", format!("Bearer {}", config.code))
-            .header("X-Relay-Key", &config.access_key)
+            .header("Authorization", format!("Bearer {}", config.code));
+        if !config.access_key.is_empty() {
+            post = post.header("X-Relay-Key", &config.access_key);
+        }
+        let result = post
             .send_json(&request)
             .and_then(|mut r| {
                 r.body_mut()
@@ -174,7 +186,7 @@ fn worker(jobs: Receiver<Job>, events: SyncSender<Event>) {
                     if events
                         .send(Event::Status(
                             generation,
-                            "Disconnected — check relay URL, relay key and connection",
+                            "Disconnected — timers stay local until the relay is back",
                         ))
                         .is_err()
                     {
@@ -195,10 +207,15 @@ mod tests {
         let mut c = Config {
             url: "https://timers.example.com".into(),
             access_key: "cd".repeat(16),
-            code: "ab".repeat(16),
+            code: room_code(&"ab".repeat(32), ""),
             roster: vec!["Ahri".into()],
         };
         assert!(c.valid());
+        c.access_key.clear();
+        assert!(c.valid(), "relay key is optional");
+        c.access_key = "short".into();
+        assert!(!c.valid());
+        c.access_key.clear();
         c.url = "http://timers.example.com".into();
         assert!(!c.valid());
         c.url = "http://127.0.0.1:8787".into();
@@ -210,5 +227,13 @@ mod tests {
         c.url = "https://example.com".into();
         c.code = "1234".into();
         assert!(!c.valid());
+    }
+
+    #[test]
+    fn party_code_changes_the_room() {
+        let seed = "ab".repeat(32);
+        assert_eq!(room_code(&seed, " duo "), room_code(&seed, "duo"));
+        assert_ne!(room_code(&seed, ""), room_code(&seed, "duo"));
+        assert!(valid_code(&room_code(&seed, "")));
     }
 }

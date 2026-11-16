@@ -67,21 +67,18 @@
     <sdpi-item label="Relay URL">
       <sdpi-textfield setting="syncUrl" global placeholder="https://timers.example.com"></sdpi-textfield>
     </sdpi-item>
+    <sdpi-item label="Party code">
+      <sdpi-textfield setting="partyCode" global placeholder="Optional, same for your party"></sdpi-textfield>
+    </sdpi-item>
     <sdpi-item label="Relay key">
-      <sdpi-password setting="syncKey" global placeholder="Relay key from the server owner"></sdpi-password>
-    </sdpi-item>
-    <sdpi-item label="Room code">
-      <sdpi-textfield id="room-code" setting="syncCode" global placeholder="32-character private room code"></sdpi-textfield>
-    </sdpi-item>
-    <sdpi-item label="">
-      <sdpi-button id="new-room">New private room</sdpi-button>
+      <sdpi-password setting="syncKey" global placeholder="Only for private relays"></sdpi-password>
     </sdpi-item>
     <p class="hint" id="sync-status" role="status" aria-live="polite">Sync: Off</p>
-    <p class="hint">Use the same relay URL, relay key and room code on every teammate's PC. Anyone with
-      both keys can change timers, undo the latest shared start, or reset the room.
-      Create a new room for each match. Joining uses the room's timers; existing local timers
-      are replaced. During an outage, countdowns continue but new shared edits are refused.
-      Turn sync off to use local timers.</p>
+    <p class="hint">Teammates in the same match who use the same relay join one room
+      automatically. Use a party code with your premade to keep others out: the room
+      comes from the player names, which the enemy team can see too.
+      Undo and holding Reset only remove your own starts. Without a connection your
+      timers stay local and are shared when the relay is back.</p>
   </details>
 
   <details open>
@@ -150,13 +147,6 @@
       if (message.payload && message.payload.event === "syncStatus") {
         document.getElementById("sync-status").textContent = "Sync: " + message.payload.status;
       }
-    });
-    document.getElementById("new-room").addEventListener("click", async function () {
-      const bytes = crypto.getRandomValues(new Uint8Array(16));
-      const code = Array.from(bytes, b => b.toString(16).padStart(2, "0")).join("");
-      const settings = await client.getGlobalSettings();
-      client.setGlobalSettings({ ...settings, syncCode: code });
-      document.getElementById("room-code").value = code;
     });
     // Plays the sound with the saved settings. The short wait lets a volume
     // change that is still being saved arrive first.

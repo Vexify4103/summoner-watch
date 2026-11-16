@@ -7,6 +7,7 @@
 use crate::settings::Settings;
 use base64::Engine;
 use serde_json::Value;
+use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::Sender;
@@ -40,7 +41,10 @@ pub enum Boots {
 
 #[derive(Clone, PartialEq, Debug)]
 pub struct Enemy {
+    /// Display name in the client language.
     pub champ: String,
+    /// Language-independent champion id, e.g. "MonkeyKing". Used for team sync.
+    pub champ_id: String,
     pub champ_icon: String,
     pub spells: [Spell; 2],
     pub boots: Boots,
@@ -80,7 +84,8 @@ impl Enemy {
 }
 
 pub enum Update {
-    Game(Vec<Enemy>),
+    /// Enemies, and the match seed for team sync (None when spectating).
+    Game(Vec<Enemy>, Option<String>),
     NoGame,
     Log(String),
 }
@@ -287,8 +292,8 @@ fn build_spell(raw: &str, display: &str, dd: &mut Option<DDragon>, web: &ureq::A
     Spell { cooldown: fallback_cooldown(&id), name, icon: String::new(), id }
 }
 
-/// Returns (my riot id, enemies) or None when no game is running.
-fn read_players(local: &ureq::Agent) -> Option<(String, Vec<RawEnemy>)> {
+/// Returns (my riot id, match seed, enemies) or None when no game is running.
+fn read_players(local: &ureq::Agent) -> Option<(String, Option<String>, Vec<RawEnemy>)> {
     // LOL_LIVE_URL only exists for local testing (tools/fake_deck).
     let base = std::env::var("LOL_LIVE_URL").unwrap_or_else(|_| LIVE.to_string());
     let list = get_json(local, &format!("{base}/playerlist"), None).ok()?;
@@ -299,15 +304,15 @@ fn read_players(local: &ureq::Agent) -> Option<(String, Vec<RawEnemy>)> {
     parse_players(&list, me)
 }
 
-fn parse_players(list: &Value, me: String) -> Option<(String, Vec<RawEnemy>)> {
+fn parse_players(list: &Value, me: String) -> Option<(String, Option<String>, Vec<RawEnemy>)> {
     let players = list.as_array()?;
     let id_of = |p: &Value| p["riotId"].as_str().or(p["summonerName"].as_str()).unwrap_or("").to_string();
-    let my_team = players
+    let team = players
         .iter()
         .find(|p| !me.is_empty() && id_of(p).eq_ignore_ascii_case(&me))
-        .and_then(|p| p["team"].as_str())
-        .unwrap_or("ORDER") // spectating: show the red side
-        .to_string();
+        .and_then(|p| p["team"].as_str());
+    let seed = team.map(|team| match_seed(players.iter().map(id_of), team));
+    let my_team = team.unwrap_or("ORDER").to_string(); // spectating: show the red side
     let spell = |p: &Value, k: &str| {
         let s = &p["summonerSpells"][k];
         (s["rawDisplayName"].as_str().unwrap_or("").to_string(), s["displayName"].as_str().unwrap_or("").to_string())
@@ -325,7 +330,17 @@ fn parse_players(list: &Value, me: String) -> Option<(String, Vec<RawEnemy>)> {
             boots: boots_of(p),
         })
         .collect();
-    Some((me, enemies))
+    Some((me, seed, enemies))
+}
+
+/// Same value for everyone on one team in one match, different for the other
+/// team. One-way, so Riot IDs never leave the PC. Not a secret: the enemy team
+/// sees the same names (the party code is the secret part).
+fn match_seed(ids: impl Iterator<Item = String>, team: &str) -> String {
+    let mut ids: Vec<String> = ids.map(|id| id.trim().to_lowercase()).collect();
+    ids.sort();
+    let text = format!("summoner-watch match v1\n{}\n{}", ids.join("\n"), team.to_uppercase());
+    Sha256::digest(text.as_bytes()).iter().map(|b| format!("{b:02x}")).collect()
 }
 
 fn boots_of(p: &Value) -> Boots {
@@ -428,12 +443,12 @@ pub fn spawn(settings: Arc<Mutex<Settings>>, league_running: Arc<AtomicBool>, tx
         let mut dd: Option<DDragon> = None;
         let mut dd_retry = Instant::now();
         let mut insight = Insight::default();
-        let mut last: Option<Vec<Enemy>> = None;
+        let mut last: Option<(Vec<Enemy>, Option<String>)> = None;
         let mut misses = 0u32;
 
         loop {
             match read_players(&local) {
-                Some((me, raw)) if !raw.is_empty() => {
+                Some((me, seed, raw)) if !raw.is_empty() => {
                     misses = 0;
                     if dd.is_none() && Instant::now() >= dd_retry {
                         match DDragon::load(&web) {
@@ -473,6 +488,7 @@ pub fn spawn(settings: Arc<Mutex<Settings>>, league_running: Arc<AtomicBool>, tx
                                 _ => String::new(),
                             },
                             champ: r.champ_name.clone(),
+                            champ_id: if r.champ_id.is_empty() { r.champ_name.clone() } else { r.champ_id.clone() },
                             spells: [
                                 build_spell(&r.spells[0].0, &r.spells[0].1, &mut dd, &web),
                                 build_spell(&r.spells[1].0, &r.spells[1].1, &mut dd, &web),
@@ -481,9 +497,10 @@ pub fn spawn(settings: Arc<Mutex<Settings>>, league_running: Arc<AtomicBool>, tx
                             insight_api: insight.get(&r.riot_id),
                         })
                         .collect();
-                    if last.as_ref() != Some(&enemies) {
-                        let _ = tx.send(Update::Game(enemies.clone()));
-                        last = Some(enemies);
+                    let state = (enemies, seed);
+                    if last.as_ref() != Some(&state) {
+                        let _ = tx.send(Update::Game(state.0.clone(), state.1.clone()));
+                        last = Some(state);
                     }
                 }
                 _ => {
@@ -525,7 +542,7 @@ mod tests {
             player("Foe#2", "CHAOS", "Lux", "SummonerHeal", "SummonerFlash", &[]),
             player("Foe#3", "CHAOS", "Jinx", "SummonerHeal", "SummonerFlash", &[3171]),
         ]);
-        let (me, enemies) = parse_players(&list, "me#euw".into()).unwrap();
+        let (me, _, enemies) = parse_players(&list, "me#euw".into()).unwrap();
         assert_eq!(me, "me#euw");
         assert_eq!(enemies.len(), 3);
         assert_eq!(enemies[0].champ_id, "MonkeyKing");
@@ -557,9 +574,24 @@ mod tests {
             player("A#1", "ORDER", "Ahri", "SummonerFlash", "SummonerDot", &[]),
             player("B#1", "CHAOS", "Lux", "SummonerFlash", "SummonerHeal", &[]),
         ]);
-        let (_, enemies) = parse_players(&list, String::new()).unwrap();
+        let (_, seed, enemies) = parse_players(&list, String::new()).unwrap();
         assert_eq!(enemies.len(), 1);
         assert_eq!(enemies[0].riot_id, "B#1");
+        assert!(seed.is_none(), "spectators never join a team room");
+    }
+
+    #[test]
+    fn teammates_share_a_match_seed_and_enemies_do_not() {
+        let list = json!([
+            player("A#1", "ORDER", "Ahri", "SummonerFlash", "SummonerDot", &[]),
+            player("B#1", "ORDER", "Lux", "SummonerFlash", "SummonerHeal", &[]),
+            player("C#1", "CHAOS", "Jinx", "SummonerFlash", "SummonerHeal", &[]),
+        ]);
+        let seed = |me: &str| parse_players(&list, me.into()).unwrap().1.unwrap();
+        assert_eq!(seed("A#1"), seed("b#1"));
+        assert_ne!(seed("A#1"), seed("C#1"));
+        assert_eq!(seed("A#1").len(), 64);
+        assert!(!seed("A#1").contains("a#1"));
     }
 
     #[test]

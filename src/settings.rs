@@ -6,7 +6,8 @@ pub struct Settings {
     pub sync_enabled: bool,
     pub sync_url: String,
     pub sync_key: String,
-    pub sync_code: String,
+    /// Optional shared secret mixed into the automatic match room.
+    pub party_code: String,
     pub api_key: String,
     pub platform: String,
     /// Seconds subtracted from every timer, to cover reaction time.
@@ -50,7 +51,7 @@ impl Default for Settings {
             sync_enabled: false,
             sync_url: String::new(),
             sync_key: String::new(),
-            sync_code: String::new(),
+            party_code: String::new(),
             api_key: String::new(),
             platform: "euw1".into(),
             offset: 3.0,
@@ -101,7 +102,7 @@ impl Settings {
             sync_enabled: v["syncEnabled"].as_bool().unwrap_or(false),
             sync_url: text(v, "syncUrl", "").trim_end_matches('/').to_string(),
             sync_key: text(v, "syncKey", ""),
-            sync_code: text(v, "syncCode", "").to_ascii_lowercase(),
+            party_code: text(v, "partyCode", ""),
             sound: if known { sound } else { d.sound.clone() },
             sound_path,
             api_key: text(v, "riotApiKey", ""),
@@ -143,10 +144,10 @@ mod tests {
         let defaults = Settings::from_json(&json!({}));
         assert!(!defaults.sync_enabled);
         let s = Settings::from_json(&json!({ "syncEnabled": true,
-            "syncUrl": " https://timers.example.com/ ", "syncCode": " ABCD " }));
+            "syncUrl": " https://timers.example.com/ ", "partyCode": " Duo " }));
         assert!(s.sync_enabled);
         assert_eq!(s.sync_url, "https://timers.example.com");
-        assert_eq!(s.sync_code, "abcd");
+        assert_eq!(s.party_code, "Duo");
     }
 
     #[test]

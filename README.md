@@ -90,20 +90,23 @@ Badges on the key:
 
 ## Optional: share timers with teammates
 
-Enable **Team sync** in the key settings, enter your relay's HTTPS URL and relay key, and share the
-same private room code with teammates. **New private room** generates a code. Use a
-new room for every match. Sync is off by default; local use needs no relay.
+Enable **Team sync** in the key settings and enter the relay's HTTPS URL. Sync is off
+by default; local use needs no relay.
 
-Everyone in the same room and enemy roster can start, restart, adjust, cancel and
-reset timers. The relay orders changes and sends the same countdowns to everyone.
-Undo reverses the latest accepted timer start in the room, including a teammate's;
-haste and offset come from the PC starting that timer. Sound and display preferences
-remain local. Joining replaces local timers with the room's state.
+Teammates in the same match who use the same relay join one room automatically. The
+room is a hash of the ten player names and your team side, so it is different for
+every match and for the enemy team. It is not a secret: the enemy team sees the same
+names. With a premade, enter the same **Party code** (any text) to keep others out.
+Spectators and replays never join a room.
 
-The settings show the connection status. During outages, countdowns continue, but
-new shared edits are refused. Turn sync off to edit locally; existing countdowns
-are retained. Already submitted edits retry for at most five seconds, with duplicate
-requests applied only once.
+Everyone in the room can start, restart, adjust and cancel timers. The relay orders
+changes and sends the same countdowns to everyone. Undo reverses only your own newest
+start, and holding Reset only removes your own starts; teammates' timers stay. Haste
+and offset come from the PC that starts a timer. Sound and display preferences stay local.
+
+The settings show the connection status. Without a connection, timers work locally.
+When the relay is back, your local countdowns are added to the room (they never
+replace a teammate's timer) and the room's timers are shown.
 
 The Rust relay can run on your Raspberry Pi behind HTTPS. Setup and operational
 details are in [deploy/README.md](deploy/README.md).
@@ -134,7 +137,9 @@ Haste values are settings, because Riot changes them in balance patches.
 | Volume | 60 | Slider, 0 = silent. **Test sound** plays the current choice |
 | Riot API key / Server | empty | Optional, see below |
 | Team sync | Off | Share timer changes through your relay |
-| Relay URL / Relay key / Room code | empty | HTTPS endpoint, server access key and private match room |
+| Relay URL | empty | HTTPS address of the relay |
+| Party code | empty | Optional, shared with your premade so only you join the room |
+| Relay key | empty | Only for private relays that require one |
 
 ## Optional: auto-detect Cosmic Insight
 
@@ -152,8 +157,9 @@ the Riot spectator API once per game which enemies took Cosmic Insight, and sets
   `*.api.riotgames.com`.
 - Your Riot API key is stored in Stream Deck's settings on your PC. It is sent only to Riot.
 - With Team sync enabled, the plugin also connects to the relay URL you configure.
-  It sends the private room code, a random client ID, champion/spell identifiers and
-  timer changes. Riot IDs, Riot API keys and sound files are never sent to the relay.
+  It sends a room code (a one-way hash of the player names, your team side and party
+  code), a random client ID, enemy champion/spell identifiers and timer changes. Riot
+  IDs, the party code itself, Riot API keys and sound files are never sent to the relay.
   Room state is held in memory and expires after two idle hours. The relay sees your
   IP address as part of the network connection; no analytics are collected.
 - With sync off, no relay connections are made.

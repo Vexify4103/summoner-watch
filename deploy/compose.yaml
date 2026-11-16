@@ -5,7 +5,8 @@ services:
       dockerfile: deploy/Dockerfile
     restart: unless-stopped
     environment:
-      SUMMONER_RELAY_KEY: ${SUMMONER_RELAY_KEY:?Set a random 32-character hex relay key}
+      # Empty = public relay. For a private relay: a random 32-character hex key.
+      SUMMONER_RELAY_KEY: ${SUMMONER_RELAY_KEY:-}
     read_only: true
     cap_drop: [ALL]
     security_opt: [no-new-privileges:true]
