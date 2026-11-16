@@ -1,0 +1,17 @@
+{
+    servers {
+        timeouts {
+            read_header 5s
+            read_body 5s
+            write 5s
+            idle 30s
+        }
+    }
+}
+
+timers.example.com {
+    request_body {
+        max_size 16KB
+    }
+    reverse_proxy 127.0.0.1:8787
+}

@@ -3,6 +3,10 @@ use serde_json::Value;
 /// Plugin-wide settings, edited in the Stream Deck property inspector (global settings).
 #[derive(Clone, Debug)]
 pub struct Settings {
+    pub sync_enabled: bool,
+    pub sync_url: String,
+    pub sync_key: String,
+    pub sync_code: String,
     pub api_key: String,
     pub platform: String,
     /// Seconds subtracted from every timer, to cover reaction time.
@@ -43,6 +47,10 @@ fn parse_order(s: &str) -> Vec<String> {
 impl Default for Settings {
     fn default() -> Self {
         Settings {
+            sync_enabled: false,
+            sync_url: String::new(),
+            sync_key: String::new(),
+            sync_code: String::new(),
             api_key: String::new(),
             platform: "euw1".into(),
             offset: 3.0,
@@ -90,6 +98,10 @@ impl Settings {
         let sound = text(v, "sound", old_default).to_lowercase();
         let known = sound == "custom" || sound == "off" || crate::sound::PRESETS.iter().any(|(id, _)| *id == sound);
         Settings {
+            sync_enabled: v["syncEnabled"].as_bool().unwrap_or(false),
+            sync_url: text(v, "syncUrl", "").trim_end_matches('/').to_string(),
+            sync_key: text(v, "syncKey", ""),
+            sync_code: text(v, "syncCode", "").to_ascii_lowercase(),
             sound: if known { sound } else { d.sound.clone() },
             sound_path,
             api_key: text(v, "riotApiKey", ""),
@@ -125,6 +137,17 @@ impl Settings {
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn sync_is_opt_in_and_settings_round_trip() {
+        let defaults = Settings::from_json(&json!({}));
+        assert!(!defaults.sync_enabled);
+        let s = Settings::from_json(&json!({ "syncEnabled": true,
+            "syncUrl": " https://timers.example.com/ ", "syncCode": " ABCD " }));
+        assert!(s.sync_enabled);
+        assert_eq!(s.sync_url, "https://timers.example.com");
+        assert_eq!(s.sync_code, "abcd");
+    }
 
     #[test]
     fn default_order_puts_flash_first() {

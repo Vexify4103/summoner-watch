@@ -88,6 +88,26 @@ Badges on the key:
 - **B+** (red): the enemy owns Crimson Lucidity, the upgraded boots (+20 summoner haste).
 - Both boots badges are detected automatically from the scoreboard.
 
+## Optional: share timers with teammates
+
+Enable **Team sync** in the key settings, enter your relay's HTTPS URL and relay key, and share the
+same private room code with teammates. **New private room** generates a code. Use a
+new room for every match. Sync is off by default; local use needs no relay.
+
+Everyone in the same room and enemy roster can start, restart, adjust, cancel and
+reset timers. The relay orders changes and sends the same countdowns to everyone.
+Undo reverses the latest accepted timer start in the room, including a teammate's;
+haste and offset come from the PC starting that timer. Sound and display preferences
+remain local. Joining replaces local timers with the room's state.
+
+The settings show the connection status. During outages, countdowns continue, but
+new shared edits are refused. Turn sync off to edit locally; existing countdowns
+are retained. Already submitted edits retry for at most five seconds, with duplicate
+requests applied only once.
+
+The Rust relay can run on your Raspberry Pi behind HTTPS. Setup and operational
+details are in [deploy/README.md](deploy/README.md).
+
 ## Cooldown math
 
 `timer = base cooldown x 100 / (100 + summoner haste) - start early`
@@ -113,6 +133,8 @@ Haste values are settings, because Riot changes them in balance patches.
 | Sound file | empty | Your own `.wav`, `.mp3`, `.ogg` or `.flac`, used when Sound is "My sound file". Raised to full level, first 8 seconds only |
 | Volume | 60 | Slider, 0 = silent. **Test sound** plays the current choice |
 | Riot API key / Server | empty | Optional, see below |
+| Team sync | Off | Share timer changes through your relay |
+| Relay URL / Relay key / Room code | empty | HTTPS endpoint, server access key and private match room |
 
 ## Optional: auto-detect Cosmic Insight
 
@@ -129,7 +151,12 @@ the Riot spectator API once per game which enemies took Cosmic Insight, and sets
   `ddragon.leagueoflegends.com` (icons and cooldowns), and, only if you enter a key, to
   `*.api.riotgames.com`.
 - Your Riot API key is stored in Stream Deck's settings on your PC. It is sent only to Riot.
-- No analytics, no other servers.
+- With Team sync enabled, the plugin also connects to the relay URL you configure.
+  It sends the private room code, a random client ID, champion/spell identifiers and
+  timer changes. Riot IDs, Riot API keys and sound files are never sent to the relay.
+  Room state is held in memory and expires after two idle hours. The relay sees your
+  IP address as part of the network connection; no analytics are collected.
+- With sync off, no relay connections are made.
 
 ## Build from source
 
@@ -139,6 +166,7 @@ Needs [Rust](https://rustup.rs) and Windows.
 powershell -ExecutionPolicy Bypass -File install.ps1   # build + install into your Stream Deck
 powershell -ExecutionPolicy Bypass -File package.ps1   # build dist\*.streamDeckPlugin to share
 cargo test --release                                    # unit tests
+cargo test --features relay                             # also test relay and two-client sync
 cargo build --release --bins --examples
 cargo run --release --example fake_deck -- target/preview   # end-to-end test without Stream Deck or League
 ```

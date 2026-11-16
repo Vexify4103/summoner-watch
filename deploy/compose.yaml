@@ -1,0 +1,15 @@
+services:
+  relay:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    restart: unless-stopped
+    environment:
+      SUMMONER_RELAY_KEY: ${SUMMONER_RELAY_KEY:?Set a random 32-character hex relay key}
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 128m
+    pids_limit: 64
+    ports:
+      - "127.0.0.1:8787:8787"

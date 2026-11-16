@@ -1,0 +1,7 @@
+.git
+target
+target-*
+dist
+.env
+**/*.env
+com.vexify4103.summonerwatch.sdPlugin/bin

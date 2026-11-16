@@ -5,6 +5,7 @@ mod game;
 mod render;
 mod settings;
 mod sound;
+mod sync;
 
 use game::{Boots, Enemy, Update, QUEST_TP};
 use render::SpellState;
@@ -16,6 +17,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{mpsc, Arc, Mutex};
 use std::time::{Duration, Instant};
 use tungstenite::Message;
+use summoner_watch::shared::{Command, Key, Snapshot, HISTORY_LIMIT};
 
 const LONG_PRESS: Duration = Duration::from_millis(450);
 /// Second tap within this time = the other spell (enemy keys).
@@ -53,10 +55,6 @@ struct Timer {
     total: f64,
 }
 
-/// How many timer starts Undo can step back through.
-const HISTORY_LIMIT: usize = 256;
-
-/// One timer start, for Undo: the timer it replaced (a restart) or None.
 struct Started {
     slot: usize,
     idx: usize,
@@ -76,8 +74,10 @@ struct App {
     fresh: [[Option<Instant>; 3]; 5],
     manual_insight: [Option<bool>; 5],
     edit_mode: bool,
-    /// Timer starts in press order, newest last.
     history: VecDeque<Started>,
+    sync: sync::Client,
+    sync_status: String,
+    inspectors: Vec<String>,
     /// Timer order kept while a dial or Timer key is in use, so a timer that
     /// passes its neighbour does not jump to another dial mid-turn:
     /// (keep until, (enemy, spell) in display order).
@@ -137,27 +137,89 @@ impl App {
         self.frozen = None;
     }
 
-    /// Starts single taps still waiting for a possible double-tap, oldest first.
-    fn flush_pending(&mut self) {
-        let mut pending: Vec<_> = self
-            .instances
-            .iter_mut()
-            .filter_map(|(ctx, i)| i.pending_tap.take().map(|at| (ctx.clone(), i.slot, at)))
-            .collect();
-        pending.sort_by_key(|p| p.2);
-        for (ctx, slot, at) in pending {
-            self.press_enemy(&ctx, slot, false, at);
+    fn shared_key(&self, slot: usize, idx: usize) -> Key {
+        let e = &self.enemies[slot];
+        let id = &e.spell(idx).id;
+        // Teleport's upgrade must keep the same shared timer identity.
+        let spell = if idx == QUEST_TP { "QuestTeleport" } else if id.contains("Teleport") { "SummonerTeleport" } else { id };
+        Key { champion: e.champ.clone(), spell: spell.into() }
+    }
+
+    fn refresh_sync(&mut self) {
+        let s = self.settings.lock().unwrap().clone();
+        let mut roster: Vec<_> = self.enemies.iter().map(|e| e.champ.clone()).collect();
+        roster.sort();
+        roster.dedup();
+        let config = if s.sync_enabled { sync::Config { url: s.sync_url, access_key: s.sync_key, code: s.sync_code, roster } } else { sync::Config::default() };
+        let status = if !s.sync_enabled { "Off" } else if self.enemies.is_empty() { "Waiting for a game" } else if !config.valid() { "Enter an HTTPS relay URL, relay key and room code" } else { "Connecting" };
+        let before = self.sync.generation;
+        self.sync.configure(config);
+        if before != self.sync.generation { self.history.clear(); }
+        if before != self.sync.generation || status != "Connecting" {
+            self.set_sync_status(status);
         }
     }
 
-    /// Undoes the newest timer start that is still running. Undoing a restart
-    /// brings back the countdown it replaced.
-    fn undo(&mut self) {
-        self.flush_pending();
-        while let Some(entry) = self.history.pop_back() {
-            if !self.timers[entry.slot][entry.idx].is_some_and(|t| t.end > Instant::now()) {
-                continue; // cancelled or expired
+    fn set_sync_status(&mut self, status: &str) {
+        if self.sync_status == status { return; }
+        self.sync_status = status.into();
+        for ctx in &self.inspectors {
+            self.out.push(json!({ "event": "sendToPropertyInspector", "context": ctx, "payload": { "event": "syncStatus", "status": status } }));
+        }
+    }
+
+    /// Returns true when sync owns the change (including a disconnected relay).
+    fn share(&mut self, ctx: &str, command: Command) -> bool {
+        if !self.settings.lock().unwrap().sync_enabled { return false; }
+        if !self.sync.submit(command) {
+            if !ctx.is_empty() { self.out.push(json!({ "event": "showAlert", "context": ctx })); }
+            self.log("Shared timer change unavailable: wait for relay connection, or turn sync off for local timers");
+        }
+        true
+    }
+
+    fn apply_snapshot(&mut self, snapshot: Snapshot, anchor: Instant) {
+        let now = Instant::now();
+        let mut next = [[None; 3]; 5];
+        for (slot, enemy) in self.enemies.iter().enumerate().take(5) {
+            for (idx, next_timer) in next[slot].iter_mut().enumerate() {
+                if idx == QUEST_TP && enemy.quest_tp.is_none() { continue; }
+                let key = self.shared_key(slot, idx);
+                if let Some(t) = snapshot.timers.iter().find(|t| t.key == key) {
+                    let left = Duration::from_millis(t.end_ms.saturating_sub(snapshot.now_ms)).saturating_sub(now.saturating_duration_since(anchor));
+                    if !left.is_zero() && left <= Duration::from_secs(1200) && t.total_ms <= 1_200_000 {
+                        *next_timer = Some(Timer { end: now + left, total: t.total_ms as f64 / 1000.0 });
+                        self.fresh[slot][idx] = None;
+                    }
+                }
             }
+        }
+        let mut ring = false;
+        for (slot, pair) in self.timers.iter().enumerate() {
+            for (idx, old) in pair.iter().enumerate() {
+                if let Some(old) = old.filter(|_| next[slot][idx].is_none()) {
+                    if old.end <= now {
+                        self.fresh[slot][idx] = Some(now);
+                        ring = true;
+                    } else { self.fresh[slot][idx] = None; }
+                }
+            }
+        }
+        self.timers = next;
+        if ring { sound::play(&self.settings.lock().unwrap()); }
+    }
+
+    fn flush_pending(&mut self) {
+        let mut pending: Vec<_> = self.instances.iter_mut().filter_map(|(ctx, i)| i.pending_tap.take().map(|at| (ctx.clone(), i.slot, at))).collect();
+        pending.sort_by_key(|p| p.2);
+        for (ctx, slot, at) in pending { self.press_enemy(&ctx, slot, false, at); }
+    }
+
+    fn undo(&mut self, ctx: &str) {
+        self.flush_pending();
+        if self.share(ctx, Command::Undo) { return; }
+        while let Some(entry) = self.history.pop_back() {
+            if !self.timers[entry.slot][entry.idx].is_some_and(|t| t.end > Instant::now()) { continue; }
             self.timers[entry.slot][entry.idx] = entry.previous.filter(|t| t.end > Instant::now());
             self.fresh[entry.slot][entry.idx] = None;
             self.frozen = None;
@@ -232,20 +294,22 @@ impl App {
             spell.cooldown
         };
         let secs = (base * 100.0 / (100.0 + haste) - s.offset).max(1.0);
+        let total_ms = (secs * 1000.0) as u64;
+        let remaining_ms = total_ms.saturating_sub(at.elapsed().as_millis() as u64).max(1);
+        if self.share(ctx, Command::Start { key: self.shared_key(slot, idx), remaining_ms, total_ms }) { return; }
         let timer = Timer { end: at + Duration::from_secs_f64(secs), total: secs };
         let pos = self.history.partition_point(|e| e.at <= at);
         // A single tap can resolve after a later immediate start on another
-        // copy of the same enemy key. Insert it in press order without
-        // replacing that newer start, and fix the newer entry's undo state.
+        // copy of the same enemy key. Insert it chronologically without
+        // replacing that newer start, and repair the newer entry's undo state.
         let newer = self.history.iter_mut().skip(pos).find(|e| e.slot == slot && e.idx == idx);
         let (previous, replace) = match newer {
             Some(next) => (next.previous.replace(timer), false),
             None => (self.timers[slot][idx], true),
         };
-        self.history.insert(pos, Started { slot, idx, at, previous });
-        if self.history.len() > HISTORY_LIMIT {
-            self.history.pop_front();
-        }
+        let entry = Started { slot, idx, at, previous };
+        self.history.insert(pos, entry);
+        if self.history.len() > HISTORY_LIMIT { self.history.pop_front(); }
         if replace {
             self.timers[slot][idx] = Some(timer);
             self.fresh[slot][idx] = None;
@@ -257,6 +321,7 @@ impl App {
         let order = self.running();
         self.hold_order(&order);
         if let Some(&(s, i, ..)) = order.get(rank) {
+            if self.share("", Command::Adjust { key: self.shared_key(s, i), delta_ms: (delta * 1000.0) as i64 }) { return; }
             if let Some(t) = self.timers[s][i].as_mut() {
                 let now = Instant::now();
                 let left = (t.end.saturating_duration_since(now).as_secs_f64() + delta).max(1.0);
@@ -270,6 +335,7 @@ impl App {
         let order = self.running();
         self.hold_order(&order);
         if let Some(&(s, i, ..)) = order.get(rank) {
+            if self.share("", Command::Cancel { key: self.shared_key(s, i) }) { return; }
             self.timers[s][i] = None;
             self.history.retain(|e| e.slot != s || e.idx != i);
         }
@@ -364,6 +430,15 @@ impl App {
             }
             "didReceiveGlobalSettings" => {
                 *self.settings.lock().unwrap() = Settings::from_json(&p["settings"]);
+                self.refresh_sync();
+            }
+            "propertyInspectorDidAppear" => {
+                if !self.inspectors.contains(&ctx) { self.inspectors.push(ctx.clone()); }
+                self.out.push(json!({ "event": "sendToPropertyInspector", "context": ctx, "payload": { "event": "syncStatus", "status": self.sync_status } }));
+            }
+            "propertyInspectorDidDisappear" => self.inspectors.retain(|c| c != &ctx),
+            "sendToPlugin" if p["event"].as_str() == Some("getSyncStatus") => {
+                self.out.push(json!({ "event": "sendToPropertyInspector", "context": ctx, "payload": { "event": "syncStatus", "status": self.sync_status } }));
             }
             // "Test sound" button in the settings panel.
             "sendToPlugin" if p["event"].as_str() == Some("testSound") => {
@@ -387,8 +462,11 @@ impl App {
                     }
                     Kind::Enemy => self.release_enemy(&ctx, slot, long),
                     Kind::Insight => self.edit_mode = !self.edit_mode,
-                    Kind::Reset if long => self.clear_timers(),
-                    Kind::Reset => self.undo(),
+                    Kind::Reset if long => {
+                        self.instances.values_mut().for_each(|i| i.pending_tap = None);
+                        if !self.share(&ctx, Command::Reset) { self.clear_timers(); }
+                    }
+                    Kind::Reset => self.undo(&ctx),
                     // Timer on a normal key (no dial): tap = 5s less, hold = cancel.
                     Kind::Dial if long => self.cancel_rank(slot),
                     Kind::Dial => self.adjust_rank(slot, -5.0),
@@ -422,6 +500,7 @@ impl App {
                     ));
                 }
                 self.enemies = list;
+                self.refresh_sync();
             }
             Update::NoGame => {
                 self.instances.values_mut().for_each(|i| i.pending_tap = None);
@@ -429,12 +508,27 @@ impl App {
                 self.clear_timers();
                 self.manual_insight = [None; 5];
                 self.edit_mode = false;
+                self.refresh_sync();
             }
             Update::Log(m) => self.log(m),
         }
     }
 
     fn tick(&mut self) {
+        while let Ok(event) = self.sync.rx.try_recv() {
+            match event {
+                sync::Event::Snapshot(generation, snapshot, at) if generation == self.sync.generation => {
+                    self.sync.connected_at = Some(Instant::now());
+                    self.set_sync_status("Connected");
+                    self.apply_snapshot(snapshot, at);
+                }
+                sync::Event::Status(generation, status) if generation == self.sync.generation => {
+                    self.sync.connected_at = None;
+                    self.set_sync_status(status);
+                }
+                _ => {}
+            }
+        }
         let now = Instant::now();
         // Single taps whose double-tap window has passed.
         let mut due: Vec<(String, usize, Instant)> = self
@@ -603,6 +697,9 @@ fn main() {
         manual_insight: [None; 5],
         edit_mode: false,
         history: VecDeque::new(),
+        sync: sync::Client::spawn(),
+        sync_status: "Off".into(),
+        inspectors: Vec::new(),
         frozen: None,
         out: vec![
             json!({ "event": register, "uuid": uuid }),
@@ -628,7 +725,7 @@ fn main() {
         }
         app.tick();
         for msg in app.out.drain(..) {
-            if ws.send(Message::Text(msg.to_string().into())).is_err() {
+            if ws.send(Message::Text(msg.to_string())).is_err() {
                 return;
             }
         }
@@ -641,31 +738,15 @@ mod tests {
 
     fn app() -> App {
         let spell = |id: &str| game::Spell { id: id.into(), name: id.into(), cooldown: 300.0, icon: String::new() };
-        let enemies = ["Ahri", "Lux"]
-            .into_iter()
-            .map(|name| Enemy {
-                champ: name.into(),
-                champ_icon: String::new(),
-                spells: [spell("SummonerFlash"), spell("SummonerHeal")],
-                boots: Boots::None,
-                insight_api: None,
-                level: 1,
-                quest_tp: None,
-            })
-            .collect();
+        let enemies = ["Ahri", "Lux"].into_iter().map(|name| Enemy {
+            champ: name.into(), champ_icon: String::new(), spells: [spell("SummonerFlash"), spell("SummonerHeal")],
+            boots: Boots::None, insight_api: None, level: 1, quest_tp: None,
+        }).collect();
         App {
             settings: Arc::new(Mutex::new(Settings { sound: "off".into(), ..Settings::default() })),
-            league_running: Arc::new(AtomicBool::new(false)),
-            instances: HashMap::new(),
-            device_cols: HashMap::new(),
-            enemies,
-            timers: [[None; 3]; 5],
-            fresh: [[None; 3]; 5],
-            manual_insight: [None; 5],
-            edit_mode: false,
-            history: VecDeque::new(),
-            frozen: None,
-            out: Vec::new(),
+            league_running: Arc::new(AtomicBool::new(false)), instances: HashMap::new(), device_cols: HashMap::new(), enemies,
+            timers: [[None; 3]; 5], fresh: [[None; 3]; 5], manual_insight: [None; 5], edit_mode: false,
+            history: VecDeque::new(), sync: sync::Client::spawn(), sync_status: "Off".into(), inspectors: Vec::new(), frozen: None, out: Vec::new(),
         }
     }
 
@@ -676,22 +757,22 @@ mod tests {
         let original = a.timers[0][0].unwrap().end;
         a.start("b", 1, 1);
         a.start("a", 0, 0);
-        a.undo();
+        a.undo("");
         assert_eq!(a.timers[0][0].unwrap().end, original);
-        a.undo();
+        a.undo("");
         assert!(a.timers[1][1].is_none());
-        a.undo();
+        a.undo("");
         assert!(a.timers[0][0].is_none());
-        a.undo();
+        a.undo("");
         assert!(a.history.is_empty());
     }
 
     #[test]
-    fn changing_settings_keeps_undo_history() {
+    fn changing_sound_settings_keeps_local_undo_history() {
         let mut a = app();
         a.start("a", 0, 0);
         a.handle(&json!({ "event": "didReceiveGlobalSettings", "payload": { "settings": { "sound": "off", "volume": 20 } } }));
-        a.undo();
+        a.undo("");
         assert!(a.timers[0][0].is_none());
     }
 
@@ -701,11 +782,11 @@ mod tests {
         a.handle(&json!({ "event": "willAppear", "action": "test.enemy", "context": "a", "payload": { "settings": { "slot": 1 } } }));
         let at = Instant::now() - Duration::from_millis(200);
         a.instances.get_mut("a").unwrap().pending_tap = Some(at);
-        a.start("b", 1, 0); // immediate start resolves before the earlier tap
-        a.undo();
+        a.start("b", 1, 0); // Immediate start resolves before the earlier tap.
+        a.undo("");
         assert!(a.timers[1][0].is_none());
         assert!(a.timers[0][0].is_some());
-        a.undo();
+        a.undo("");
         assert!(a.timers[0][0].is_none());
         a.instances.get_mut("a").unwrap().pending_tap = Some(at);
         a.clear_timers();
@@ -715,16 +796,16 @@ mod tests {
     }
 
     #[test]
-    fn late_resolving_copy_of_same_key_keeps_newer_start() {
+    fn late_resolving_copy_of_same_key_preserves_newer_start() {
         let mut a = app();
         let earlier = Instant::now() - Duration::from_millis(200);
         a.start("newer", 0, 0);
         let latest_end = a.timers[0][0].unwrap().end;
         a.start_at("older", 0, 0, earlier);
         assert_eq!(a.timers[0][0].unwrap().end, latest_end);
-        a.undo();
+        a.undo("");
         assert!(a.timers[0][0].unwrap().end < latest_end);
-        a.undo();
+        a.undo("");
         assert!(a.timers[0][0].is_none());
     }
 
@@ -734,14 +815,102 @@ mod tests {
         a.start("a", 0, 0);
         a.start("b", 1, 0);
         a.timers[1][0].as_mut().unwrap().end = Instant::now() - Duration::from_secs(1);
-        a.undo();
+        a.undo("");
         assert!(a.timers[0][0].is_none());
         a.clear_timers();
         a.start("a", 0, 0);
         a.start("b", 1, 0);
         a.cancel_rank(0);
-        a.undo();
+        a.undo("");
         assert!(a.timers.iter().flatten().all(Option::is_none));
+    }
+
+    #[test]
+    fn sync_off_is_local_and_disconnected_sync_refuses_edits() {
+        let mut a = app();
+        a.start("a", 0, 0);
+        assert!(a.timers[0][0].is_some());
+        a.settings.lock().unwrap().sync_enabled = true;
+        a.start("b", 1, 0);
+        assert!(a.timers[1][0].is_none());
+        assert!(a.out.iter().any(|v| v["event"] == "showAlert"));
+        a.undo("");
+        assert!(a.timers[0][0].is_some());
+        a.settings.lock().unwrap().sync_enabled = false;
+        a.undo("");
+        assert!(a.timers[0][0].is_none());
+    }
+
+    #[test]
+    fn snapshots_map_by_champion_and_spell_and_teleport_upgrade_keeps_identity() {
+        let mut a = app();
+        a.enemies[0].spells[1].id = "S12_SummonerTeleportUpgrade".into();
+        assert_eq!(a.shared_key(0, 1).spell, "SummonerTeleport");
+        let snapshot = Snapshot { now_ms: 50_000, revision: 1, acknowledged: 0, timers: vec![
+            summoner_watch::shared::SharedTimer { key: a.shared_key(1, 0), end_ms: 150_000, total_ms: 300_000 },
+        ] };
+        a.enemies.swap(0, 1);
+        a.apply_snapshot(snapshot, Instant::now());
+        assert!(a.timers[0][0].is_some());
+        assert!(a.timers[1][0].is_none());
+        let left = a.timers[0][0].unwrap().end.duration_since(Instant::now()).as_secs_f64();
+        assert!((99.0..=100.0).contains(&left));
+    }
+
+    #[cfg(feature = "relay")]
+    #[test]
+    fn two_apps_converge_through_real_http_client_workers() {
+        let server = Arc::new(tiny_http::Server::http("127.0.0.1:0").unwrap());
+        let url = format!("http://{}", server.server_addr());
+        let endpoint = server.clone();
+        let stopped = Arc::new(AtomicBool::new(false));
+        let stop = stopped.clone();
+        let handle = std::thread::spawn(move || {
+            let mut room = summoner_watch::shared::Room::default();
+            let start = Instant::now();
+            while !stop.load(Ordering::Relaxed) {
+                let Some(mut req) = endpoint.recv_timeout(Duration::from_millis(50)).unwrap() else { continue };
+                assert_eq!(req.url(), "/v1/exchange");
+                assert!(req.headers().iter().any(|h| h.field.equiv("Authorization") && h.value.as_str() == format!("Bearer {}", "ab".repeat(16))));
+                let mut body = String::new();
+                req.as_reader().read_to_string(&mut body).unwrap();
+                let exchange = serde_json::from_str(&body).unwrap();
+                let snapshot = room.exchange(&exchange, start.elapsed().as_millis() as u64).unwrap();
+                req.respond(tiny_http::Response::from_string(serde_json::to_string(&snapshot).unwrap())).unwrap();
+            }
+        });
+        let mut a = app();
+        let mut b = app();
+        for app in [&mut a, &mut b] {
+            *app.settings.lock().unwrap() = Settings { sync_enabled: true, sync_url: url.clone(), sync_key: "cd".repeat(16), sync_code: "ab".repeat(16), sound: "off".into(), ..Settings::default() };
+            app.refresh_sync();
+        }
+        let pump = |a: &mut App, b: &mut App, ready: fn(&App, &App) -> bool| {
+            let until = Instant::now() + Duration::from_secs(5);
+            while !ready(a, b) && Instant::now() < until {
+                a.tick(); b.tick(); std::thread::sleep(Duration::from_millis(10));
+            }
+            assert!(ready(a, b), "apps did not converge before deadline");
+        };
+        pump(&mut a, &mut b, |a, b| a.sync.connected_at.is_some() && b.sync.connected_at.is_some());
+        a.start("a", 0, 0);
+        pump(&mut a, &mut b, |a, b| a.timers[0][0].is_some() && b.timers[0][0].is_some());
+        let first = a.timers[0][0].unwrap().end;
+        let second = b.timers[0][0].unwrap().end;
+        let difference = first.saturating_duration_since(second).max(second.saturating_duration_since(first));
+        assert!(difference < Duration::from_millis(100));
+        b.start("b", 1, 1);
+        pump(&mut a, &mut b, |a, b| a.timers[1][1].is_some() && b.timers[1][1].is_some());
+        a.undo("");
+        pump(&mut a, &mut b, |a, b| a.timers[1][1].is_none() && b.timers[1][1].is_none());
+        assert!(a.timers[0][0].is_some() && b.timers[0][0].is_some());
+        b.settings.lock().unwrap().sync_enabled = false;
+        b.refresh_sync();
+        a.share("", Command::Reset);
+        pump(&mut a, &mut b, |a, _| a.timers[0][0].is_none());
+        assert!(b.timers[0][0].is_some(), "sync-off must retain local countdowns");
+        stopped.store(true, Ordering::Relaxed);
+        handle.join().unwrap();
     }
 
     fn at(col: u64, row: u64) -> Value {
