@@ -10,7 +10,7 @@ use game::{Boots, Enemy, Update, QUEST_TP};
 use render::SpellState;
 use serde_json::{json, Value};
 use settings::Settings;
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::net::TcpStream;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{mpsc, Arc, Mutex};
@@ -53,6 +53,17 @@ struct Timer {
     total: f64,
 }
 
+/// How many timer starts Undo can step back through.
+const HISTORY_LIMIT: usize = 256;
+
+/// One timer start, for Undo: the timer it replaced (a restart) or None.
+struct Started {
+    slot: usize,
+    idx: usize,
+    at: Instant,
+    previous: Option<Timer>,
+}
+
 struct App {
     settings: Arc<Mutex<Settings>>,
     league_running: Arc<AtomicBool>,
@@ -65,7 +76,8 @@ struct App {
     fresh: [[Option<Instant>; 3]; 5],
     manual_insight: [Option<bool>; 5],
     edit_mode: bool,
-    last_started: Option<(usize, usize)>,
+    /// Timer starts in press order, newest last.
+    history: VecDeque<Started>,
     /// Timer order kept while a dial or Timer key is in use, so a timer that
     /// passes its neighbour does not jump to another dial mid-turn:
     /// (keep until, (enemy, spell) in display order).
@@ -118,10 +130,39 @@ impl App {
     }
 
     fn clear_timers(&mut self) {
+        self.instances.values_mut().for_each(|i| i.pending_tap = None);
         self.timers = [[None; 3]; 5];
         self.fresh = [[None; 3]; 5];
-        self.last_started = None;
+        self.history.clear();
         self.frozen = None;
+    }
+
+    /// Starts single taps still waiting for a possible double-tap, oldest first.
+    fn flush_pending(&mut self) {
+        let mut pending: Vec<_> = self
+            .instances
+            .iter_mut()
+            .filter_map(|(ctx, i)| i.pending_tap.take().map(|at| (ctx.clone(), i.slot, at)))
+            .collect();
+        pending.sort_by_key(|p| p.2);
+        for (ctx, slot, at) in pending {
+            self.press_enemy(&ctx, slot, false, at);
+        }
+    }
+
+    /// Undoes the newest timer start that is still running. Undoing a restart
+    /// brings back the countdown it replaced.
+    fn undo(&mut self) {
+        self.flush_pending();
+        while let Some(entry) = self.history.pop_back() {
+            if !self.timers[entry.slot][entry.idx].is_some_and(|t| t.end > Instant::now()) {
+                continue; // cancelled or expired
+            }
+            self.timers[entry.slot][entry.idx] = entry.previous.filter(|t| t.end > Instant::now());
+            self.fresh[entry.slot][entry.idx] = None;
+            self.frozen = None;
+            break;
+        }
     }
 
     /// Running timers in display order: (enemy, spell, remaining, total).
@@ -191,9 +232,24 @@ impl App {
             spell.cooldown
         };
         let secs = (base * 100.0 / (100.0 + haste) - s.offset).max(1.0);
-        self.timers[slot][idx] = Some(Timer { end: at + Duration::from_secs_f64(secs), total: secs });
-        self.fresh[slot][idx] = None;
-        self.last_started = Some((slot, idx));
+        let timer = Timer { end: at + Duration::from_secs_f64(secs), total: secs };
+        let pos = self.history.partition_point(|e| e.at <= at);
+        // A single tap can resolve after a later immediate start on another
+        // copy of the same enemy key. Insert it in press order without
+        // replacing that newer start, and fix the newer entry's undo state.
+        let newer = self.history.iter_mut().skip(pos).find(|e| e.slot == slot && e.idx == idx);
+        let (previous, replace) = match newer {
+            Some(next) => (next.previous.replace(timer), false),
+            None => (self.timers[slot][idx], true),
+        };
+        self.history.insert(pos, Started { slot, idx, at, previous });
+        if self.history.len() > HISTORY_LIMIT {
+            self.history.pop_front();
+        }
+        if replace {
+            self.timers[slot][idx] = Some(timer);
+            self.fresh[slot][idx] = None;
+        }
     }
 
     /// Moves the Nth soonest timer by `delta` seconds (never below 1s left).
@@ -215,6 +271,7 @@ impl App {
         self.hold_order(&order);
         if let Some(&(s, i, ..)) = order.get(rank) {
             self.timers[s][i] = None;
+            self.history.retain(|e| e.slot != s || e.idx != i);
         }
     }
 
@@ -331,11 +388,7 @@ impl App {
                     Kind::Enemy => self.release_enemy(&ctx, slot, long),
                     Kind::Insight => self.edit_mode = !self.edit_mode,
                     Kind::Reset if long => self.clear_timers(),
-                    Kind::Reset => {
-                        if let Some((s, i)) = self.last_started.take() {
-                            self.timers[s][i] = None;
-                        }
-                    }
+                    Kind::Reset => self.undo(),
                     // Timer on a normal key (no dial): tap = 5s less, hold = cancel.
                     Kind::Dial if long => self.cancel_rank(slot),
                     Kind::Dial => self.adjust_rank(slot, -5.0),
@@ -384,7 +437,7 @@ impl App {
     fn tick(&mut self) {
         let now = Instant::now();
         // Single taps whose double-tap window has passed.
-        let due: Vec<(String, usize, Instant)> = self
+        let mut due: Vec<(String, usize, Instant)> = self
             .instances
             .iter_mut()
             .filter_map(|(ctx, i)| {
@@ -393,6 +446,7 @@ impl App {
                 Some((ctx.clone(), i.slot, first))
             })
             .collect();
+        due.sort_by_key(|p| p.2);
         for (ctx, slot, first) in due {
             self.press_enemy(&ctx, slot, false, first);
         }
@@ -548,7 +602,7 @@ fn main() {
         fresh: [[None; 3]; 5],
         manual_insight: [None; 5],
         edit_mode: false,
-        last_started: None,
+        history: VecDeque::new(),
         frozen: None,
         out: vec![
             json!({ "event": register, "uuid": uuid }),
@@ -584,6 +638,111 @@ fn main() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn app() -> App {
+        let spell = |id: &str| game::Spell { id: id.into(), name: id.into(), cooldown: 300.0, icon: String::new() };
+        let enemies = ["Ahri", "Lux"]
+            .into_iter()
+            .map(|name| Enemy {
+                champ: name.into(),
+                champ_icon: String::new(),
+                spells: [spell("SummonerFlash"), spell("SummonerHeal")],
+                boots: Boots::None,
+                insight_api: None,
+                level: 1,
+                quest_tp: None,
+            })
+            .collect();
+        App {
+            settings: Arc::new(Mutex::new(Settings { sound: "off".into(), ..Settings::default() })),
+            league_running: Arc::new(AtomicBool::new(false)),
+            instances: HashMap::new(),
+            device_cols: HashMap::new(),
+            enemies,
+            timers: [[None; 3]; 5],
+            fresh: [[None; 3]; 5],
+            manual_insight: [None; 5],
+            edit_mode: false,
+            history: VecDeque::new(),
+            frozen: None,
+            out: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn undo_walks_back_starts_and_restores_restart_deadline() {
+        let mut a = app();
+        a.start("a", 0, 0);
+        let original = a.timers[0][0].unwrap().end;
+        a.start("b", 1, 1);
+        a.start("a", 0, 0);
+        a.undo();
+        assert_eq!(a.timers[0][0].unwrap().end, original);
+        a.undo();
+        assert!(a.timers[1][1].is_none());
+        a.undo();
+        assert!(a.timers[0][0].is_none());
+        a.undo();
+        assert!(a.history.is_empty());
+    }
+
+    #[test]
+    fn changing_settings_keeps_undo_history() {
+        let mut a = app();
+        a.start("a", 0, 0);
+        a.handle(&json!({ "event": "didReceiveGlobalSettings", "payload": { "settings": { "sound": "off", "volume": 20 } } }));
+        a.undo();
+        assert!(a.timers[0][0].is_none());
+    }
+
+    #[test]
+    fn delayed_taps_undo_in_press_order_and_reset_discards_pending() {
+        let mut a = app();
+        a.handle(&json!({ "event": "willAppear", "action": "test.enemy", "context": "a", "payload": { "settings": { "slot": 1 } } }));
+        let at = Instant::now() - Duration::from_millis(200);
+        a.instances.get_mut("a").unwrap().pending_tap = Some(at);
+        a.start("b", 1, 0); // immediate start resolves before the earlier tap
+        a.undo();
+        assert!(a.timers[1][0].is_none());
+        assert!(a.timers[0][0].is_some());
+        a.undo();
+        assert!(a.timers[0][0].is_none());
+        a.instances.get_mut("a").unwrap().pending_tap = Some(at);
+        a.clear_timers();
+        a.tick();
+        assert!(a.history.is_empty());
+        assert!(a.timers.iter().flatten().all(Option::is_none));
+    }
+
+    #[test]
+    fn late_resolving_copy_of_same_key_keeps_newer_start() {
+        let mut a = app();
+        let earlier = Instant::now() - Duration::from_millis(200);
+        a.start("newer", 0, 0);
+        let latest_end = a.timers[0][0].unwrap().end;
+        a.start_at("older", 0, 0, earlier);
+        assert_eq!(a.timers[0][0].unwrap().end, latest_end);
+        a.undo();
+        assert!(a.timers[0][0].unwrap().end < latest_end);
+        a.undo();
+        assert!(a.timers[0][0].is_none());
+    }
+
+    #[test]
+    fn cancelled_and_expired_timers_do_not_block_undo() {
+        let mut a = app();
+        a.start("a", 0, 0);
+        a.start("b", 1, 0);
+        a.timers[1][0].as_mut().unwrap().end = Instant::now() - Duration::from_secs(1);
+        a.undo();
+        assert!(a.timers[0][0].is_none());
+        a.clear_timers();
+        a.start("a", 0, 0);
+        a.start("b", 1, 0);
+        a.cancel_rank(0);
+        a.undo();
+        assert!(a.timers.iter().flatten().all(Option::is_none));
+    }
 
     fn at(col: u64, row: u64) -> Value {
         json!({ "column": col, "row": row })

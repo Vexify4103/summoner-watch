@@ -35,7 +35,7 @@ time, because the exe is not code-signed.
 |---|---|---|
 | Keys 1-4 (top row), key 5 (bottom left) | Enemy | Enemies 1-5 in scoreboard order (top, jungle, mid, bot, support) |
 | Key 6 | Cosmic Insight Edit | Tap it, then tap an enemy, to toggle Cosmic Insight for that enemy |
-| Key 7 | Undo / Reset | Tap: undo the last started timer. Hold: clear all timers |
+| Key 7 | Undo / Reset | Tap: undo timer starts, newest first. Hold: clear all timers |
 | Key 8 | Stream Deck "Switch Profile" | Back to your main profile (built-in action) |
 | Dials 1-4 | Timer | Dial 1 shows the soonest timer, dial 2 the next, and so on |
 
@@ -77,6 +77,10 @@ settings and set "Enemy".
   places while you turn, and re-sort 2 s after the last click, so a timer that passes its
   neighbour does not jump to another dial mid-turn. Timer keys work the same way.
 - **Push or tap a dial:** cancel that timer.
+- **Tap Undo / Reset repeatedly:** undo timer starts in reverse press order. Undoing a
+  restart restores the original countdown, including time that has passed. Cancelled
+  and expired timers are skipped. The last 256 starts are kept; holding the key clears
+  all timers and history.
 
 Badges on the key:
 - **CI** (purple): the enemy has Cosmic Insight (+18 summoner spell haste).

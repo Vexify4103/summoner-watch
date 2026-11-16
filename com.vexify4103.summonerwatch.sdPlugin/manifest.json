@@ -91,7 +91,7 @@
     {
       "UUID": "com.vexify4103.summonerwatch.reset",
       "Name": "Undo / Reset",
-      "Tooltip": "Tap: undo last started timer. Hold: clear all timers.",
+      "Tooltip": "Tap repeatedly to undo timer starts in reverse order. Hold: clear all timers and history.",
       "Icon": "imgs/action",
       "Controllers": [
         "Keypad"
