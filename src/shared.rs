@@ -4,6 +4,10 @@ use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, VecDeque};
 
 pub const HISTORY_LIMIT: usize = 256;
+/// A teammate's start of the same timer within this window is a double press
+/// of one spell use and is ignored. No summoner spell or ultimate comes back
+/// this quickly.
+pub const DOUBLE_PRESS_MS: u64 = 10_000;
 /// Longest timer the relay accepts (20 minutes).
 const MAX_MS: u64 = 1_200_000;
 
@@ -88,6 +92,8 @@ pub struct Snapshot {
 
 struct Started {
     client: String,
+    /// Relay time of the press.
+    at: u64,
     timer: SharedTimer,
     /// The countdown this start replaced (a restart), restored by Undo.
     previous: Option<SharedTimer>,
@@ -187,9 +193,12 @@ impl Room {
                 if self.timers.len() >= 15 && !self.timers.contains_key(key) {
                     return;
                 }
+                if self.teammate_just_started(key, client, now) {
+                    return;
+                }
                 let timer = make(key, *remaining_ms, *total_ms);
                 let previous = self.timers.insert(key.clone(), timer.clone()).filter(|t| t.end_ms > now);
-                self.history.push_back(Started { client: client.into(), timer, previous });
+                self.history.push_back(Started { client: client.into(), at: now, timer, previous });
                 if self.history.len() > HISTORY_LIMIT {
                     self.history.pop_front();
                 }
@@ -221,6 +230,17 @@ impl Room {
             }
             Command::Reset => while self.undo(client, now) {},
         }
+    }
+
+    /// True when another client started the running timer for `key` less than
+    /// [`DOUBLE_PRESS_MS`] ago. The client's own re-press still restarts it.
+    fn teammate_just_started(&self, key: &Key, client: &str, now: u64) -> bool {
+        let Some(running) = self.timers.get(key).filter(|t| t.end_ms > now) else {
+            return false;
+        };
+        self.history.iter().rev().find(|e| &e.timer.key == key).is_some_and(|e| {
+            &e.timer == running && e.client != client && now.saturating_sub(e.at) < DOUBLE_PRESS_MS
+        })
     }
 
     /// Undoes the client's newest start that is still running. Returns false when
@@ -297,21 +317,61 @@ mod tests {
     fn undoing_a_start_a_teammate_restarted_keeps_their_countdown() {
         let mut room = Room::default();
         room.exchange(&request('a', vec![(1, start("Ahri"))]), 1000).unwrap();
-        room.exchange(&request('b', vec![(1, start("Ahri"))]), 5000).unwrap();
-        let s = room.exchange(&request('a', vec![(2, Command::Undo)]), 6000).unwrap();
-        assert_eq!(s.timers[0].end_ms, 305_000, "b's restart stays");
+        room.exchange(&request('b', vec![(1, start("Ahri"))]), 15_000).unwrap();
+        let s = room.exchange(&request('a', vec![(2, Command::Undo)]), 16_000).unwrap();
+        assert_eq!(s.timers[0].end_ms, 315_000, "b's restart stays");
         // b's undo must not bring back a's undone start.
-        assert!(room.exchange(&request('b', vec![(2, Command::Undo)]), 7000).unwrap().timers.is_empty());
+        assert!(room.exchange(&request('b', vec![(2, Command::Undo)]), 17_000).unwrap().timers.is_empty());
+    }
+
+    #[test]
+    fn teammate_double_press_within_ten_seconds_is_ignored() {
+        let mut room = Room::default();
+        room.exchange(&request('a', vec![(1, start("Ahri"))]), 1000).unwrap();
+        let s = room.exchange(&request('b', vec![(1, start("Ahri"))]), 5000).unwrap();
+        assert_eq!(s.timers[0].end_ms, 301_000, "first press wins");
+        // b's Undo has nothing of its own to undo; a's timer stays.
+        let s = room.exchange(&request('b', vec![(2, Command::Undo)]), 6000).unwrap();
+        assert_eq!(s.timers[0].end_ms, 301_000);
+        // The presser's own re-press still restarts.
+        let s = room.exchange(&request('a', vec![(2, start("Ahri"))]), 7000).unwrap();
+        assert_eq!(s.timers[0].end_ms, 307_000);
+        // a's undo restores a's first start, which is still recent: b stays blocked.
+        room.exchange(&request('a', vec![(3, Command::Undo)]), 8000).unwrap();
+        let s = room.exchange(&request('b', vec![(3, start("Ahri"))]), 9000).unwrap();
+        assert_eq!(s.timers[0].end_ms, 301_000);
+        // From 10 s on, a teammate's press restarts as before.
+        let s = room.exchange(&request('b', vec![(4, start("Ahri"))]), 11_000).unwrap();
+        assert_eq!(s.timers[0].end_ms, 311_000);
+    }
+
+    #[test]
+    fn undone_or_cancelled_start_does_not_block_teammates() {
+        let mut room = Room::default();
+        room.exchange(&request('a', vec![(1, start("Ahri")), (2, Command::Undo)]), 1000).unwrap();
+        let s = room.exchange(&request('b', vec![(1, start("Ahri"))]), 2000).unwrap();
+        assert_eq!(s.timers[0].end_ms, 302_000);
+        room.exchange(&request('b', vec![(2, Command::Cancel { key: key("Ahri") })]), 3000).unwrap();
+        let s = room.exchange(&request('a', vec![(3, start("Ahri"))]), 4000).unwrap();
+        assert_eq!(s.timers[0].end_ms, 304_000);
+    }
+
+    #[test]
+    fn adjusted_timer_still_counts_as_just_started() {
+        let mut room = Room::default();
+        room.exchange(&request('a', vec![(1, start("Ahri")), (2, Command::Adjust { key: key("Ahri"), delta_ms: -5000 })]), 1000).unwrap();
+        let s = room.exchange(&request('b', vec![(1, start("Ahri"))]), 3000).unwrap();
+        assert_eq!(s.timers[0].end_ms, 296_000);
     }
 
     #[test]
     fn reset_clears_only_own_starts() {
         let mut room = Room::default();
         room.exchange(&request('a', vec![(1, start("Ahri")), (2, start("Lux"))]), 1000).unwrap();
-        room.exchange(&request('b', vec![(1, start("Lux"))]), 2000).unwrap();
-        let s = room.exchange(&request('a', vec![(3, Command::Reset)]), 3000).unwrap();
+        room.exchange(&request('b', vec![(1, start("Lux"))]), 12_000).unwrap();
+        let s = room.exchange(&request('a', vec![(3, Command::Reset)]), 13_000).unwrap();
         assert_eq!(champs(&s), ["Lux"]);
-        assert_eq!(s.timers[0].end_ms, 302_000, "b's start stays");
+        assert_eq!(s.timers[0].end_ms, 312_000, "b's start stays");
     }
 
     #[test]

@@ -96,7 +96,10 @@ docker compose -f deploy/compose.yaml up -d --build
    secret. A premade enters the same **Party code** to keep everyone else out.
 5. Spectators and replays never join a room.
 
-Everyone in a room can start, restart, adjust and cancel timers. **Undo** reverses
+Everyone in a room can start, restart, adjust and cancel timers. When a teammate
+presses a timer that someone else started less than 10 seconds ago, the press is
+ignored: both saw the same spell, and the first press keeps its deadline. Your own
+re-press still restarts the timer. **Undo** reverses
 only the presser's own newest start; undoing a restart restores the old deadline.
 Holding **Undo / Reset** removes only the presser's own starts. Dial changes and
 cancellations are shared but are not separate undo steps. Up to 256 starts can be
