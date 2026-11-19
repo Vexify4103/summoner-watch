@@ -90,8 +90,9 @@ Badges on the key:
 
 ## Optional: share timers with teammates
 
-Enable **Team sync** in the key settings and enter the relay's HTTPS URL. Sync is off
-by default; local use needs no relay.
+Enable **Team sync** in the key settings. That is all: the plugin uses the public
+relay `sync.happygiganto.de` unless you enter your own **Relay URL**. Sync is off by
+default; local use needs no relay.
 
 Teammates in the same match who use the same relay join one room automatically. The
 room is a hash of the ten player names and your team side, so it is different for
@@ -138,7 +139,7 @@ Haste values are settings, because Riot changes them in balance patches.
 | Volume | 60 | Slider, 0 = silent. **Test sound** plays the current choice |
 | Riot API key / Server | empty | Optional, see below |
 | Team sync | Off | Share timer changes through your relay |
-| Relay URL | empty | HTTPS address of the relay |
+| Relay URL | empty | Your own relay. Empty = the public relay `sync.happygiganto.de` |
 | Party code | empty | Optional, shared with your premade so only you join the room |
 | Relay key | empty | Only for private relays that require one |
 
@@ -157,7 +158,8 @@ the Riot spectator API once per game which enemies took Cosmic Insight, and sets
   `ddragon.leagueoflegends.com` (icons and cooldowns), and, only if you enter a key, to
   `*.api.riotgames.com`.
 - Your Riot API key is stored in Stream Deck's settings on your PC. It is sent only to Riot.
-- With Team sync enabled, the plugin also connects to the relay URL you configure.
+- With Team sync enabled, the plugin also connects to the relay: the public relay
+  `sync.happygiganto.de`, or the one you enter under Relay URL.
   It sends a room code (a one-way hash of the player names, your team side and party
   code), a random client ID, enemy champion/spell identifiers and timer changes. Riot
   IDs, the party code itself, Riot API keys and sound files are never sent to the relay.

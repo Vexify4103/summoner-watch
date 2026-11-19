@@ -230,8 +230,17 @@ fn connection(stream: TcpStream, state: &Mutex<State>, config: &Config) {
             entry.seen = Instant::now();
         }
     }
+    // Close handshake: read until the client answers, so unread data does not
+    // reset the connection before the client sees an error message.
     let _ = ws.close(None);
-    let _ = ws.flush();
+    let deadline = Instant::now() + Duration::from_secs(2);
+    while Instant::now() < deadline {
+        match ws.read() {
+            Ok(_) => {}
+            Err(tungstenite::Error::Io(e)) if matches!(e.kind(), ErrorKind::WouldBlock | ErrorKind::TimedOut) => {}
+            Err(_) => break,
+        }
+    }
 }
 
 fn same_key(supplied: &str, expected: &str) -> bool {

@@ -29,6 +29,8 @@ pub struct Settings {
     pub ignore_spells: Vec<String>,
 }
 
+/// Public team-sync relay, used when the Relay URL field is empty.
+pub const DEFAULT_RELAY: &str = "https://sync.happygiganto.de";
 pub const DEFAULT_IGNORE: &str = "Smite";
 pub const DEFAULT_SPELL_ORDER: &str = "Flash, Teleport, Ignite, Cleanse, Exhaust, Barrier, Heal, Ghost, Smite";
 
@@ -49,7 +51,7 @@ impl Default for Settings {
     fn default() -> Self {
         Settings {
             sync_enabled: false,
-            sync_url: String::new(),
+            sync_url: DEFAULT_RELAY.into(),
             sync_key: String::new(),
             party_code: String::new(),
             api_key: String::new(),
@@ -100,7 +102,7 @@ impl Settings {
         let known = sound == "custom" || sound == "off" || crate::sound::PRESETS.iter().any(|(id, _)| *id == sound);
         Settings {
             sync_enabled: v["syncEnabled"].as_bool().unwrap_or(false),
-            sync_url: text(v, "syncUrl", "").trim_end_matches('/').to_string(),
+            sync_url: text(v, "syncUrl", DEFAULT_RELAY).trim_end_matches('/').to_string(),
             sync_key: text(v, "syncKey", ""),
             party_code: text(v, "partyCode", ""),
             sound: if known { sound } else { d.sound.clone() },
@@ -143,6 +145,7 @@ mod tests {
     fn sync_is_opt_in_and_settings_round_trip() {
         let defaults = Settings::from_json(&json!({}));
         assert!(!defaults.sync_enabled);
+        assert_eq!(defaults.sync_url, DEFAULT_RELAY, "works out of the box");
         let s = Settings::from_json(&json!({ "syncEnabled": true,
             "syncUrl": " https://timers.example.com/ ", "partyCode": " Duo " }));
         assert!(s.sync_enabled);
