@@ -1,0 +1,9 @@
+# Packages a relay binary built elsewhere, for small Pis that should not
+# compile Rust themselves. Put the arm64 binary at deploy/prebuilt/summoner-watch-relay
+# (see deploy/README.md) and set RELAY_DOCKERFILE=deploy/Dockerfile.prebuilt in deploy/.env.
+FROM debian:bookworm-slim
+COPY deploy/prebuilt/summoner-watch-relay /usr/local/bin/summoner-watch-relay
+USER 65534:65534
+ENV SUMMONER_RELAY_BIND=0.0.0.0:8787
+EXPOSE 8787
+ENTRYPOINT ["summoner-watch-relay"]

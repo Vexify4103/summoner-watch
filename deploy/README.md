@@ -36,6 +36,22 @@ The health response is `{"ok":true}`. `deploy/.env` is ignored by git; never com
 the token. If it leaks, use **Refresh token** in the tunnel settings and update
 `deploy/.env`.
 
+### Low-memory Pi
+
+Compiling Rust needs about 1 GB of free memory. If the Pi has less, build the
+relay on a PC with Docker and copy only the binary (from the repository root):
+
+```sh
+docker run --rm -v "$PWD:/src" -w /src rust:1-bookworm bash -c '
+  apt-get update && apt-get install -y gcc-aarch64-linux-gnu &&
+  rustup target add aarch64-unknown-linux-gnu &&
+  CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc   CC_aarch64_unknown_linux_gnu=aarch64-linux-gnu-gcc CARGO_TARGET_DIR=target-docker   cargo build --release --locked --features relay --bin summoner-watch-relay     --target aarch64-unknown-linux-gnu'
+scp target-docker/aarch64-unknown-linux-gnu/release/summoner-watch-relay   pi:summoner-watch/deploy/prebuilt/
+```
+
+Then set `RELAY_DOCKERFILE=deploy/Dockerfile.prebuilt` in `deploy/.env` on the Pi
+and start compose as above.
+
 ## Option B: your own reverse proxy (Caddy)
 
 Leave `COMPOSE_PROFILES` empty in `deploy/.env` (or do not create the file), then:

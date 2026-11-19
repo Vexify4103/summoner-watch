@@ -4,3 +4,4 @@
 /dist/
 /deploy/.env
 .env
+/deploy/prebuilt/
