@@ -3,22 +3,50 @@
 Use a 64-bit Raspberry Pi OS installation with Docker Compose. Build on the Pi;
 Docker selects the Pi's native architecture. No Riot API key is needed by the relay.
 
-From the repository root:
+Plugins connect with a WebSocket to `wss://your-hostname/v1/ws`; changes are
+pushed to teammates right away. The client accepts plain HTTP only on localhost for
+testing or an SSH tunnel; certificates are verified for every remote connection.
+
+The relay must be reachable over HTTPS. Pick one of the two ways below.
+
+## Option A: Cloudflare Tunnel (recommended at home)
+
+The Pi opens an outgoing connection to Cloudflare, so you need no port forwarding,
+no DDNS and no public IPv4 (it also works behind DS-Lite or CGNAT). Your home IP
+address stays hidden. Cloudflare provides the HTTPS certificate for free.
+
+1. Add your domain to Cloudflare (free plan) and change its nameservers at your
+   registrar to the two Cloudflare shows. Existing records (website, email) are
+   copied and keep pointing where they did; check the list before switching.
+2. In the Cloudflare dashboard go to **Networking > Tunnels > Create a tunnel**.
+   Choose **Docker** and copy only the token (the long string after `--token`).
+3. Open the tunnel, **Routes > Add route > Published application**: subdomain
+   (for example `sync`), your domain, Service URL `http://relay:8787`.
+4. On the Pi, from the repository root:
+
+   ```sh
+   cp deploy/.env.example deploy/.env
+   chmod 600 deploy/.env
+   nano deploy/.env   # paste the token after TUNNEL_TOKEN=
+   docker compose -f deploy/compose.yaml up -d --build
+   curl https://sync.example.com/health
+   ```
+
+The health response is `{"ok":true}`. `deploy/.env` is ignored by git; never commit
+the token. If it leaks, use **Refresh token** in the tunnel settings and update
+`deploy/.env`.
+
+## Option B: your own reverse proxy (Caddy)
+
+Leave `COMPOSE_PROFILES` empty in `deploy/.env` (or do not create the file), then:
 
 ```sh
 docker compose -f deploy/compose.yaml up -d --build
 curl http://127.0.0.1:8787/health
 ```
 
-The health response is `{"ok":true}`. Plugins connect with a WebSocket to
-`wss://your-hostname/v1/ws`; changes are pushed to teammates right away. The
-container listens only on the Pi's loopback interface. Put an HTTPS reverse proxy in front of it before connecting
-teammates over the internet. The client accepts plain HTTP only on localhost for
-testing or an SSH tunnel; certificates are verified for every remote connection.
-
-Point your hostname at the Pi's public connection and forward ports 80 and 443 to
-the Pi. If your connection is behind CGNAT, use a tunnel/reverse proxy offering a
-public HTTPS endpoint instead of router port forwarding.
+The container listens only on the Pi's loopback interface. Point your hostname at
+the Pi's public connection and forward ports 80 and 443 to the Pi.
 
 `Caddyfile.example` is a complete configuration for a **host-installed Caddy**.
 Replace `timers.example.com` with your hostname, merge with any existing Caddy
@@ -37,7 +65,7 @@ For a relay only your friends use, set a key before starting it and give it to t
 for the **Relay key** setting:
 
 ```sh
-export SUMMONER_RELAY_KEY=$(openssl rand -hex 16)
+openssl rand -hex 16   # put the result after SUMMONER_RELAY_KEY= in deploy/.env
 docker compose -f deploy/compose.yaml up -d --build
 ```
 
@@ -83,9 +111,9 @@ Each connection thread uses little memory; the container is capped at 128 MB.
 
 A client that breaks a limit is disconnected. Limits per client IP need the real
 address: the relay reads it from `SUMMONER_RELAY_IP_HEADER` (default
-`X-Forwarded-For` in `compose.yaml`), but only when the connection comes from a
-loopback or private address, such as Caddy on the same machine or the Docker
-bridge. Behind Cloudflare set it to `CF-Connecting-IP`. Without the header every
+`X-Forwarded-For` in `compose.yaml`, `CF-Connecting-IP` in `.env.example` for the
+tunnel), but only when the connection comes from a loopback or private address,
+such as the tunnel container, Caddy on the same machine or the Docker bridge. Without the header every
 client looks like the proxy, and the per-IP limits apply to everyone together.
 
 ## Privacy

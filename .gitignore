@@ -2,3 +2,5 @@
 /target-*
 /com.vexify4103.summonerwatch.sdPlugin/bin/
 /dist/
+/deploy/.env
+.env

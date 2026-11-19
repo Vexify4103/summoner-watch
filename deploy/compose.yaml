@@ -1,3 +1,4 @@
+# Settings come from deploy/.env (copy deploy/.env.example; never commit .env).
 services:
   relay:
     build:
@@ -17,3 +18,18 @@ services:
     pids_limit: 64
     ports:
       - "127.0.0.1:8787:8787"
+
+  # Cloudflare Tunnel: HTTPS without port forwarding. Enabled by
+  # COMPOSE_PROFILES=tunnel in deploy/.env.
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    profiles: [tunnel]
+    restart: unless-stopped
+    command: tunnel --no-autoupdate run
+    environment:
+      TUNNEL_TOKEN: ${TUNNEL_TOKEN:?Set TUNNEL_TOKEN in deploy/.env}
+    depends_on: [relay]
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 128m
